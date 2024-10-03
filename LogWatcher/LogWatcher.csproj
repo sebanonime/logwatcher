@@ -1,0 +1,382 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{6C1BCD0D-CB0B-4E80-8DA3-6C631575F276}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>LogWatcher</RootNamespace>
+    <AssemblyName>LogWatcher</AssemblyName>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <OldToolsVersion>3.5</OldToolsVersion>
+    <UpgradeBackupLocation>
+    </UpgradeBackupLocation>
+    <StartupObject>LogWatcher.Program</StartupObject>
+    <ApplicationIcon>Search.ico</ApplicationIcon>
+    <NoWin32Manifest>true</NoWin32Manifest>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>full</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
+    <DebugSymbols>true</DebugSymbols>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <CodeAnalysisLogFile>bin\Debug\LogWatcher.exe.CodeAnalysisLog.xml</CodeAnalysisLogFile>
+    <CodeAnalysisUseTypeNameInSuppression>true</CodeAnalysisUseTypeNameInSuppression>
+    <CodeAnalysisModuleSuppressionsFile>GlobalSuppressions.cs</CodeAnalysisModuleSuppressionsFile>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSetDirectories>;C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\\Rule Sets</CodeAnalysisRuleSetDirectories>
+    <CodeAnalysisRuleDirectories>;C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\FxCop\\Rules</CodeAnalysisRuleDirectories>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <CodeAnalysisLogFile>bin\Release\LogWatcher.exe.CodeAnalysisLog.xml</CodeAnalysisLogFile>
+    <CodeAnalysisUseTypeNameInSuppression>true</CodeAnalysisUseTypeNameInSuppression>
+    <CodeAnalysisModuleSuppressionsFile>GlobalSuppressions.cs</CodeAnalysisModuleSuppressionsFile>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
+    <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSetDirectories>;C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\\Rule Sets</CodeAnalysisRuleSetDirectories>
+    <CodeAnalysisRuleDirectories>;C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Static Analysis Tools\FxCop\\Rules</CodeAnalysisRuleDirectories>
+    <CodeAnalysisIgnoreBuiltInRules>false</CodeAnalysisIgnoreBuiltInRules>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.VisualBasic" />
+    <Reference Include="System" />
+    <Reference Include="System.configuration" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="WeifenLuo.WinFormsUI.Docking, Version=2.2.4005.23598, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\WeifenLuo.WinFormsUI.Docking.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AlertManager.cs" />
+    <Compile Include="Frm\AboutBox.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\AboutBox.Designer.cs">
+      <DependentUpon>AboutBox.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_DetailViewMaster.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_DetailViewMaster.Designer.cs">
+      <DependentUpon>Frm_DetailViewMaster.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_FilterHistoric.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_FilterHistoric.Designer.cs">
+      <DependentUpon>Frm_FilterHistoric.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_FilterViewer.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_FilterViewer.Designer.cs">
+      <DependentUpon>Frm_FilterViewer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_ContextView.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_ContextView.Designer.cs">
+      <DependentUpon>Frm_ContextView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_DetailView.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_DetailView.Designer.cs">
+      <DependentUpon>Frm_DetailView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_LoadModeSelector.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_LoadModeSelector.Designer.cs">
+      <DependentUpon>Frm_LoadModeSelector.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_LogBrowser.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_LogBrowser.Designer.cs">
+      <DependentUpon>Frm_LogBrowser.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_ProfileSelector.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_ProfileSelector.Designer.cs">
+      <DependentUpon>Frm_ProfileSelector.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_SelectedView.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_SelectedView.Designer.cs">
+      <DependentUpon>Frm_SelectedView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\InputBox.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="InstanceSingleton.cs" />
+    <Compile Include="LogManager.cs" />
+    <Compile Include="LogWatcherEventArgs\AlertEventArgs.cs" />
+    <Compile Include="Frm\Frm_Alert.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Alert.Designer.cs">
+      <DependentUpon>Frm_Alert.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_Config.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Config.Designer.cs">
+      <DependentUpon>Frm_Config.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_Doc.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Doc.Designer.cs">
+      <DependentUpon>Frm_Doc.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_Filter.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Filter.Designer.cs">
+      <DependentUpon>Frm_Filter.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Frm\Frm_Search.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Search.Designer.cs">
+      <DependentUpon>Frm_Search.cs</DependentUpon>
+    </Compile>
+    <Compile Include="LogConfig.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="LogWatcherEventArgs\LoadingEventArgs.cs" />
+    <Compile Include="Frm\Frm_Master.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Frm\Frm_Master.Designer.cs">
+      <DependentUpon>Frm_Master.cs</DependentUpon>
+    </Compile>
+    <Compile Include="NewLineTask.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="PluginManager.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="Frm\Frm_Config.resx">
+      <DependentUpon>Frm_Config.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_Filter.resx">
+      <SubType>Designer</SubType>
+      <DependentUpon>Frm_Filter.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_Master.resx">
+      <SubType>Designer</SubType>
+      <DependentUpon>Frm_Master.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <None Include="App.config" />
+    <None Include="Properties\DataSources\AlertInfo.datasource" />
+    <None Include="Properties\DataSources\Highlighting.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.LoadMode.datasource" />
+    <None Include="Properties\DataSources\Profile.datasource" />
+    <None Include="Properties\DataSources\System.String.datasource" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <Compile Include="Properties\Settings.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+    </Compile>
+    <Compile Include="Tools\XmlCustomSerializer.cs" />
+    <Compile Include="LogWatcherEventArgs\UpdateEventArgs.cs" />
+    <Compile Include="Tools\XmlCustomSerializer_old1.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Frm\AboutBox.resx">
+      <DependentUpon>AboutBox.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_DetailViewMaster.resx">
+      <DependentUpon>Frm_DetailViewMaster.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_FilterHistoric.resx">
+      <DependentUpon>Frm_FilterHistoric.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_FilterViewer.resx">
+      <DependentUpon>Frm_FilterViewer.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_Alert.resx">
+      <DependentUpon>Frm_Alert.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_ContextView.resx">
+      <DependentUpon>Frm_ContextView.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_DetailView.resx">
+      <DependentUpon>Frm_DetailView.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_Doc.resx">
+      <DependentUpon>Frm_Doc.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_LoadModeSelector.resx">
+      <DependentUpon>Frm_LoadModeSelector.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_LogBrowser.resx">
+      <DependentUpon>Frm_LogBrowser.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_ProfileSelector.resx">
+      <DependentUpon>Frm_ProfileSelector.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_Search.resx">
+      <DependentUpon>Frm_Search.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\Frm_SelectedView.resx">
+      <DependentUpon>Frm_SelectedView.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Frm\InputBox.resx">
+      <DependentUpon>InputBox.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Images\Filter.ico" />
+    <EmbeddedResource Include="Images\Document.ico" />
+    <None Include="Images\CancelFilter.png" />
+    <None Include="Images\Download.png" />
+    <None Include="Images\Context.png" />
+    <None Include="Images\Detail View.png" />
+    <Content Include="Images\Detail.png" />
+    <Content Include="Images\filter.png" />
+    <None Include="Images\loader.gif" />
+    <Content Include="Images\NavBackwardEnable.png" />
+    <Content Include="Images\NavForwardEnable.png" />
+    <EmbeddedResource Include="Images\NoTail.png" />
+    <Content Include="Images\Search.ico" />
+    <None Include="Images\Search.png" />
+    <None Include="Properties\DataSources\LogBrowserItem.datasource" />
+    <None Include="Images\Uploads.png" />
+    <None Include="Images\Uploads2.png" />
+    <None Include="Properties\DataSources\LogBrowserVirtualFile.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.FilterHistoric.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.HiddenLine.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.Plugin.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.Profile.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.StockedFilter.datasource" />
+    <None Include="Properties\DataSources\LogWatcher.Common.StoredFilter.datasource" />
+    <None Include="Properties\DataSources\System.Text.Encoding.datasource" />
+    <EmbeddedResource Include="Images\Tail.png" />
+    <Content Include="LogWatcherConfig.xml">
+    </Content>
+    <None Include="Resources\Offline_Web_Pages.png" />
+    <None Include="Resources\Refresh.ico" />
+    <None Include="Resources\Refresh.png" />
+    <None Include="Resources\RefreshBig.png" />
+    <Content Include="Search.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Common\Common.csproj">
+      <Project>{A7040DAC-B7D5-4BD1-8BC7-B968C32811D9}</Project>
+      <Name>Common</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Windows.Installer.3.1">
+      <Visible>False</Visible>
+      <ProductName>Windows Installer 3.1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
