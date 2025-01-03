@@ -152,7 +152,14 @@
             <DockingManager.Resources>
                  <!--add views for specific ViewModels--> 
                 <DataTemplate DataType="{x:Type viewModels:LogPanelViewModel}">
-                    <view:LogPanelView />
+                    <view:LogPanelView >
+                        <!--<Style TargetType="{x:Type LayoutItem}">
+                            <Setter Property="Title" Value="{Binding Model.Title}" />
+                            <Setter Property="ToolTip" Value="{Binding Model.FilePath}" />
+                            <Setter Property="CloseCommand" Value="{Binding Model.CloseCommand}" />
+                            <Setter Property="ContentId" Value="{Binding Model.ContentId}" />
+                        </Style>-->
+                    </view:LogPanelView>
                 </DataTemplate>
             </DockingManager.Resources>
 

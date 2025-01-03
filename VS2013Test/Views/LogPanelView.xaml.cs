@@ -45,13 +45,15 @@ namespace VS2013Test.Views
 
         private void ViewModel_ScrollBottom(LogRow row)
         {
-            if (this.dataGrid.Items.Count > 0)
+
+            this.Dispatcher.BeginInvoke(new Action(() =>
             {
-                this.Dispatcher.BeginInvoke(new Action(() =>
+                if (this.dataGrid.Items.Count > 0)
                 {
-                    this.dataGrid.ScrollIntoView(this.dataGrid.Items[this.dataGrid.Items.Count - 10]);
-                }));
-            }
+                    this.dataGrid.ScrollIntoView(this.dataGrid.Items[this.dataGrid.Items.Count - 1]);
+                }
+            }));
+            
         }
     }
 }

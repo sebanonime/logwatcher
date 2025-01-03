@@ -14,20 +14,23 @@ namespace AvalonDock.VS2013Test.ViewModels
 		private RelayCommand _saveCommand = null;
 		private RelayCommand _saveAsCommand = null;
 		private RelayCommand _closeCommand = null;
-		#endregion fields
+        private string fileName;
+        #endregion fields
 
-		#region constructors
-		/// <summary>
-		/// Class constructor from file path.
-		/// </summary>
-		/// <param name="filePath"></param>
-		public FileViewModel(string filePath) : this()
+        #region constructors
+        /// <summary>
+        /// Class constructor from file path.
+        /// </summary>
+        /// <param name="filePath"></param>
+        public FileViewModel(string filePath)
 		{
-			FilePath = filePath;
+            this.FilePath = filePath;
+            this.FileName = Path.GetFileName(filePath);
+            this.Title = FileName;
 
-			//Set the icon only for open documents (just a test)
-			//IconSource = ISC.ConvertFromInvariantString(@"pack://application:,,/Images/document.png") as ImageSource;
-		}
+            //Set the icon only for open documents (just a test)
+            //IconSource = ISC.ConvertFromInvariantString(@"pack://application:,,/Images/document.png") as ImageSource;
+        }
 
 		/// <summary>
 		/// Default class constructor
@@ -49,27 +52,20 @@ namespace AvalonDock.VS2013Test.ViewModels
 				{
 					_filePath = value;
 					RaisePropertyChanged(nameof(FilePath));
-					RaisePropertyChanged(nameof(FileName));
-					RaisePropertyChanged(nameof(Title));
-
-					if (File.Exists(_filePath))
-					{
-						_textContent = File.ReadAllText(_filePath);
-						ContentId = _filePath;
-					}
 				}
 			}
 		}
 
 		public string FileName
 		{
-			get
-			{
-				if (FilePath == null)
-					return "Noname" + (IsDirty ? "*" : "");
+            get => fileName;
 
-				return System.IO.Path.GetFileName(FilePath) + (IsDirty ? "*" : "");
-			}
+            set
+            {
+                fileName = value; 
+				RaisePropertyChanged(nameof(FileName));
+            }
+            
 		}
 
 		public string TextContent

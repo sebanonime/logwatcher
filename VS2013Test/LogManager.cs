@@ -78,6 +78,8 @@ namespace LogWatcher
 
         public string FileName { get; }
 
+        public string FilePath{ get; }
+
         #endregion
 
 
@@ -184,6 +186,7 @@ namespace LogWatcher
             _loadingTimer.Interval = 50;
             _loadingTimer.AutoReset = true;
             this.FileName = logFile.Name;
+            this.FilePath = logFile.FullName;
             LogWatch = CreateNewLogWatcherCustom(logFile, loadOnlyEof, sizeToLoad);
             LogWatch.Start();
 
@@ -330,6 +333,7 @@ namespace LogWatcher
         {
             if (!_isFullLoading)
             {
+                _isFullLoading = true;
                 DisplayLines();
                 this.LoadFinished?.Invoke();
             }

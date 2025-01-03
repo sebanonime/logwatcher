@@ -18,7 +18,7 @@ namespace AvalonDock.VS2013Test.ViewModels
         private List<LogRow> logRows = new List<LogRow>();
         private Timer tailTimer;
 
-        public LogPanelViewModel(LogManager myLog) : base(myLog.FileName)
+        public LogPanelViewModel(LogManager myLog) : base(myLog.FilePath)
         {
             this.ListIsEnabled = false;
             //this.ListVisibility = "Collapsed";
@@ -29,7 +29,7 @@ namespace AvalonDock.VS2013Test.ViewModels
             this.myLog.OnLoading += this.OnLoading;
             this.myLog.LoadFinished += this.OnLoadFinished;
 
-            //this.tailTimer = new Timer(OnTailTimerEllapsed, null, 1000, 1000);
+            this.tailTimer = new Timer(OnTailTimerEllapsed, null, 1000, 1000);
 
 
             //for (int i = 0; i < 100; i++)
