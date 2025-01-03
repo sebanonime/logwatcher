@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Text;
 using LogWatcher.Common;
-using WeifenLuo.WinFormsUI.Docking;
 
 namespace LogWatcher.Common
 {
@@ -24,7 +23,7 @@ namespace LogWatcher.Common
 
         public Dictionary<Guid, ILogManager> DicoLog { get; set; }
         public ILogManager CurrentLog { get; set; }
-        public DockPanel Pnl_Dock { get; set; }
+        ///public DockPanel Pnl_Dock { get; set; }
         public virtual event EventHandler<PluginEventArgs> NewLine;
         public abstract void Run();
 

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Timers;
+using Timer = System.Timers.Timer;
 
 namespace LogWatcher.Common
 {

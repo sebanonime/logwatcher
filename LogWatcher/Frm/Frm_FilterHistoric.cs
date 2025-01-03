@@ -2,10 +2,11 @@
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using LogWatcher.Common;
+using WeifenLuo.WinFormsUI.Docking;
 
 namespace LogWatcher.Frm
 {
-    public partial class Frm_FilterHistoric : FormDocContent
+    public partial class Frm_FilterHistoric : DockContent
     {
         #region Fields
 
