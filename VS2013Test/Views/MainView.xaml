@@ -152,14 +152,7 @@
             <DockingManager.Resources>
                  <!--add views for specific ViewModels--> 
                 <DataTemplate DataType="{x:Type viewModels:LogPanelViewModel}">
-                    <view:LogPanelView >
-                        <!--<Style TargetType="{x:Type LayoutItem}">
-                            <Setter Property="Title" Value="{Binding Model.Title}" />
-                            <Setter Property="ToolTip" Value="{Binding Model.FilePath}" />
-                            <Setter Property="CloseCommand" Value="{Binding Model.CloseCommand}" />
-                            <Setter Property="ContentId" Value="{Binding Model.ContentId}" />
-                        </Style>-->
-                    </view:LogPanelView>
+                    <view:LogPanelView />
                 </DataTemplate>
             </DockingManager.Resources>
 
@@ -218,7 +211,7 @@
 				</local:PanesTemplateSelector>
 			</DockingManager.LayoutItemTemplateSelector>-->
 
-			<!--<DockingManager.LayoutItemContainerStyleSelector>
+			<DockingManager.LayoutItemContainerStyleSelector>
 				<local:PanesStyleSelector>
 					<local:PanesStyleSelector.ToolStyle>
 						<Style TargetType="{x:Type LayoutAnchorableItem}">
@@ -240,7 +233,7 @@
 					</local:PanesStyleSelector.FileStyle>
 				</local:PanesStyleSelector>
 			</DockingManager.LayoutItemContainerStyleSelector>
-			<DockingManager.LayoutUpdateStrategy>
+            <!--<DockingManager.LayoutUpdateStrategy>
 				<local:LayoutInitializer />
 			</DockingManager.LayoutUpdateStrategy>-->
 
