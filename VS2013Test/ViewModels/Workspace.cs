@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
-using static System.Net.WebRequestMethods;
 
 namespace AvalonDock.VS2013Test.ViewModels
 {
@@ -18,8 +17,6 @@ namespace AvalonDock.VS2013Test.ViewModels
 
 		private static Workspace _this = new Workspace();
 		private ToolViewModel[] _tools;
-		private ObservableCollection<FileViewModel> _files = new ObservableCollection<FileViewModel>();
-		private ObservableCollection<FileViewModel> _readonyFiles;
 		private FileViewModel _activeDocument;
 		private ErrorViewModel _errors;
 		private PropertiesViewModel _props;
@@ -40,7 +37,8 @@ namespace AvalonDock.VS2013Test.ViewModels
 		/// </summary>
 		public Workspace()
 		{
-			SelectedTheme = Themes.First();
+            Files = new ObservableCollection<FileViewModel>();
+            SelectedTheme = Themes.First();
 		}
 
 		#endregion constructors
@@ -51,16 +49,7 @@ namespace AvalonDock.VS2013Test.ViewModels
 
 		public static Workspace This => _this;
 
-		public ObservableCollection<FileViewModel> Files
-		{
-			get
-			{
-				if (_readonyFiles == null)
-					_readonyFiles = new ObservableCollection<FileViewModel>(_files);
-
-				return _readonyFiles;
-			}
-		}
+		public ObservableCollection<FileViewModel> Files { get; private set; }
 
 		public IEnumerable<ToolViewModel> Tools
 		{
@@ -236,7 +225,7 @@ namespace AvalonDock.VS2013Test.ViewModels
 				}
 			}
 
-			_files.Remove(fileToClose);
+            Files.Remove(fileToClose);
 		}
 
 		internal void Save(FileViewModel fileToSave, bool saveAsFlag = false)
@@ -307,8 +296,8 @@ namespace AvalonDock.VS2013Test.ViewModels
 
 		private void OnNew(object parameter)
 		{
-			_files.Add(new FileViewModel());
-			ActiveDocument = _files.Last();
+            Files.Add(new FileViewModel());
+			ActiveDocument = Files.Last();
 		}
 
 		#endregion NewCommand
