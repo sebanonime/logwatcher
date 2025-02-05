@@ -9,9 +9,14 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="20"/>
+            <RowDefinition Height="20"/>
             <RowDefinition/>
         </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="{Binding LoadingText}" />
+        <StackPanel>
+            <TextBox Text="{Binding FilterText}" Width="200" />
+            <Button Command="FilterClick" />
+        </StackPanel>
+        <TextBlock Grid.Row="1" Text="{Binding LoadingText}" />
         <!--<ScrollViewer x:Name="scroller" Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
             <StackPanel Orientation="Vertical">                
                 <ListBox ItemsSource="{Binding AllLogRow}" >

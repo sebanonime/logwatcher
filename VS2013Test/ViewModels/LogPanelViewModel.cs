@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
+using System.Windows.Input;
 
 namespace AvalonDock.VS2013Test.ViewModels
 {
@@ -17,6 +18,8 @@ namespace AvalonDock.VS2013Test.ViewModels
         private bool listIsEnabled;
         private List<LogRow> logRows = new List<LogRow>();
         private Timer tailTimer;
+        private ICommand filterCommand;
+        private string filterText;
 
         public LogPanelViewModel(LogManager myLog) : base(myLog.FilePath)
         {
@@ -53,6 +56,19 @@ namespace AvalonDock.VS2013Test.ViewModels
             }
         }
 
+		public ICommand FilterCommand
+		{
+			get
+			{
+				if (filterCommand == null)
+				{
+                    filterCommand = new RelayCommand((p) => this.ApplyFilter(p));
+				}
+
+				return filterCommand;
+			}
+		}
+
         public string LoadingText 
         {
             get => loadingText;
@@ -60,6 +76,16 @@ namespace AvalonDock.VS2013Test.ViewModels
             { 
                 loadingText = value;
                 this.RaisePropertyChanged(nameof(LoadingText));
+            }
+        }
+
+        public string FilterText
+        {
+            get => filterText;
+            set
+            {
+                filterText = value;
+                this.RaisePropertyChanged(nameof(FilterText));
             }
         }
 
@@ -110,6 +136,10 @@ namespace AvalonDock.VS2013Test.ViewModels
                     this.AllLogRow.Add(lineInfo);
                 }));
             }
+        }
+        private void ApplyFilter(object p)
+        {
+            this.myLog.FilterData(this.FilterText);
         }
     }
 }

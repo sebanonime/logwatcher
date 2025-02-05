@@ -192,7 +192,6 @@ namespace LogWatcher
 
             InitialiseRefreshGuiTimer();
         }
-
         
         private void InitialiseRefreshGuiTimer()
         {
@@ -553,6 +552,16 @@ namespace LogWatcher
 
         public void FilterData(String Critere, RegexOptions option)
         {
+            try
+            {
+                LogCache.ApplyFilter(Critere, option);
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+
             //try
             //{
             //    Frm_Log.BeginLoading("Filter running ...");
