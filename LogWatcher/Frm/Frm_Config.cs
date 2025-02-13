@@ -60,7 +60,7 @@ namespace LogWatcher.Frm
         public Frm_Config()
         {
             InitializeComponent();
-            ApplyDarkMode(this.Controls);
+            //ApplyDarkMode(this.Controls);
 
             foreach (Highlighting highLight in LogConfig.Singleton.DicoHighlighting)
                 _levelHighlightings.Add(highLight.Clone());
