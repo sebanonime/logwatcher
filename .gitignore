@@ -6,6 +6,10 @@
 *.user
 *.sln.docstates
 
+# Node.js
+node_modules/
+dist/
+
 # Build results
 
 [Dd]ebug/
