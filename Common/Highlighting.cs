@@ -1,9 +1,9 @@
 using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Drawing;
-using System.Xml.Serialization;
 using System.Text.RegularExpressions;
+using System.Xml.Serialization;
+#if NETFRAMEWORK
+using System.Drawing;
+#endif
 
 namespace LogWatcher.Common
 {
@@ -15,6 +15,8 @@ namespace LogWatcher.Common
         private bool? _isRegex, _caseSensitive;
         private string _text;
         private RegexOptions _option;
+        private int _foreColorArgb;
+        private int _backColorArgb;
         #endregion
 
         #region Properties
@@ -31,38 +33,48 @@ namespace LogWatcher.Common
             }
         }
 
+#if NETFRAMEWORK
         [XmlIgnoreAttribute]
-        public Color ForeColor { get; set; }
+        public Color ForeColor
+        {
+            get { return Color.FromArgb(_foreColorArgb); }
+            set { _foreColorArgb = value.ToArgb(); }
+        }
 
         [XmlIgnoreAttribute]
-        public Color BackColor { get; set; }
+        public Color BackColor
+        {
+            get { return Color.FromArgb(_backColorArgb); }
+            set { _backColorArgb = value.ToArgb(); }
+        }
+#endif
 
         public int ForeColorArgb
         {
-            get { return ForeColor.ToArgb(); }
-            set { ForeColor = Color.FromArgb(value); }
+            get { return _foreColorArgb; }
+            set { _foreColorArgb = value; }
         }
 
         public int BackColorArgb
         {
-            get { return BackColor.ToArgb(); }
-            set { BackColor = Color.FromArgb(value); }
+            get { return _backColorArgb; }
+            set { _backColorArgb = value; }
         }
 
         public bool Bold { get; set; }
         public bool HightPriority { get; set; }
 
-        public bool CaseSensitive 
+        public bool CaseSensitive
         {
             get { return _caseSensitive.HasValue ? _caseSensitive.Value : false; }
-            set 
+            set
             {
                 _caseSensitive = value;
                 SetRegexp();
             }
         }
 
-        public bool IsRegex 
+        public bool IsRegex
         {
             get { return _isRegex.HasValue ? _isRegex.Value : false; }
             set
@@ -77,10 +89,10 @@ namespace LogWatcher.Common
         #region Constructor
 
         public Highlighting()
-        { 
-
+        {
         }
 
+#if NETFRAMEWORK
         public Highlighting(int order, string text, Color foreColor, Color backColor, bool caseSensitive, bool hightPriority, bool bold, bool isRegex)
         {
             Order = order;
@@ -104,8 +116,8 @@ namespace LogWatcher.Common
 
         public Highlighting(int order, string text, Color foreColor, Color backColor)
             : this(order, text, foreColor, backColor, false, false, false, false)
-        {}
-
+        { }
+#endif
 
         #endregion
 
@@ -120,7 +132,6 @@ namespace LogWatcher.Common
             if (!string.IsNullOrEmpty(Text) && _isRegex.HasValue && _isRegex.Value)
             {
                 _regex = new Regex(Text, RegexOptions.Compiled | _option);
-
             }
         }
 
@@ -133,7 +144,7 @@ namespace LogWatcher.Common
             {
                 try
                 {
-                    return _regex.IsMatch(message); 
+                    return _regex.IsMatch(message);
                 }
                 catch
                 {
@@ -147,13 +158,18 @@ namespace LogWatcher.Common
             return mess.IndexOf(messHighlight, 0) != -1;
         }
 
-        #region ICloneable Members
-
         public Highlighting Clone()
         {
-            return new Highlighting(Order, Text, ForeColor, BackColor, CaseSensitive, HightPriority, Bold, IsRegex);
+            var clone = new Highlighting();
+            clone.Order = Order;
+            clone.Text = Text;
+            clone.ForeColorArgb = ForeColorArgb;
+            clone.BackColorArgb = BackColorArgb;
+            clone.CaseSensitive = CaseSensitive;
+            clone.HightPriority = HightPriority;
+            clone.Bold = Bold;
+            clone.IsRegex = IsRegex;
+            return clone;
         }
-
-        #endregion
     }
 }

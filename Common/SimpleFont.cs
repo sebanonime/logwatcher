@@ -1,7 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
+using System.Xml.Serialization;
+#if NETFRAMEWORK
 using System.Drawing;
+#endif
 
 namespace LogWatcher.Common
 {
@@ -10,13 +11,19 @@ namespace LogWatcher.Common
     {
         public string Name { get; set; }
         public float Size { get; set; }
+
+#if NETFRAMEWORK
         public FontStyle Style { get; set; }
+#else
+        // FontStyle stored as int for cross-platform serialization compatibility
+        public int Style { get; set; }
+#endif
 
         public SimpleFont()
         {
-            //Name = "";
         }
 
+#if NETFRAMEWORK
         public SimpleFont(string name, float size, FontStyle style)
         {
             Name = name;
@@ -35,13 +42,20 @@ namespace LogWatcher.Common
         {
             try
             {
-                Font tmp = new Font(Name, Size, Style);
-                return tmp;
+                return new Font(Name, Size, Style);
             }
             catch
             {
                 return new Font("Courier New", 9, FontStyle.Regular);
             }
         }
+#else
+        public SimpleFont(string name, float size, int style = 0)
+        {
+            Name = name;
+            Size = size;
+            Style = style;
+        }
+#endif
     }
 }

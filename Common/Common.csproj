@@ -1,24 +1,32 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFrameworks>net48;net8.0</TargetFrameworks>
     <RootNamespace>LogWatcher.Common</RootNamespace>
     <AssemblyName>LogWatcher.Common</AssemblyName>
-    <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Reference Include="System.configuration" />
-  </ItemGroup>
+  <!-- net48: keep WinForms, docking, configuration -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.configuration" />
     <Reference Include="WeifenLuo.WinFormsUI.Docking">
       <HintPath>..\WeifenLuo.WinFormsUI.Docking.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <!-- net8.0: exclude WinForms-only and BinaryFormatter-dependent files -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <Compile Remove="BasePlugin.cs" />
+    <Compile Remove="PluginDocContent.cs" />
+    <Compile Remove="SortableBindingList.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Text;
 using System.IO;
 using System.Xml;
 using System.Security.AccessControl;
+#if NETFRAMEWORK
+using System.Configuration;
+#endif
 
 namespace LogWatcher.Common
 {
@@ -60,6 +62,7 @@ namespace LogWatcher.Common
 
         public static string GetFormatedTextWithAutoSeparator(string text)
         {
+#if NETFRAMEWORK
             string formating_Separator = ConfigurationManager.AppSettings["Formating_Separator"];
             int formating_SeparatorNumber;
             if (int.TryParse(ConfigurationManager.AppSettings["Formating_SeparatorNumber"], out formating_SeparatorNumber))
@@ -83,7 +86,7 @@ namespace LogWatcher.Common
                 if (!string.IsNullOrEmpty(bestSeparator))
                     return ApplySeparator(text, bestSeparator);
             }
-
+#endif
             return text;
         }
 

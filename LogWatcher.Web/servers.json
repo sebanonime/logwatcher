@@ -1,0 +1,29 @@
+[
+  {
+    "id": "EUGV",
+    "name": "EUGV",
+    "rootFolders": [
+      {
+        "name": "Hom",
+        "servers": [
+          {
+            "id": "local1",
+            "name": "Local 1",
+            "type": "local",
+            "host": "C:\\TestLog\\TestLog1",
+            "agentId": null,
+            "username": null
+          },
+          {
+            "id": "local",
+            "name": "Local 2",
+            "type": "local",
+            "host": "C:\\TestLog\\TestLog2",
+            "agentId": null,
+            "username": null
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
+#if NETFRAMEWORK
 using System.Configuration;
+#endif
 
 namespace LogWatcher.Common
 {
@@ -52,7 +52,6 @@ namespace LogWatcher.Common
 
         public HiddenLine() : this(null, true, false, false)
         {
-            
         }
 
         public HiddenLine(string text) : this(text, true, false, false)
@@ -60,17 +59,26 @@ namespace LogWatcher.Common
         }
 
         public HiddenLine(string text, bool isActif, bool isRegex, bool caseSensitive)
+            : this(text, isActif, isRegex, caseSensitive, 20000)
+        {
+        }
+
+        public HiddenLine(string text, bool isActif, bool isRegex, bool caseSensitive, int maxLineSize)
         {
             Text = text;
             IsActif = isActif;
             IsRegex = isRegex;
             CaseSensitive = caseSensitive;
 
+#if NETFRAMEWORK
             string maxLineSizeStr = ConfigurationManager.AppSettings["MaxLineSize"];
             if (!int.TryParse(maxLineSizeStr, out _maxLineSize))
             {
-                _maxLineSize = 20000;
+                _maxLineSize = maxLineSize;
             }
+#else
+            _maxLineSize = maxLineSize;
+#endif
 
             if (IsRegex)
             {
