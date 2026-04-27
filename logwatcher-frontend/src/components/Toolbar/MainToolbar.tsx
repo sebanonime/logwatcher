@@ -3,7 +3,8 @@ import type { HubConnection } from '@microsoft/signalr'
 import { useTabStore } from '../../store/logStore'
 import { usePerimeterStore } from '../../store/perimeterStore'
 import { useFilterHistory } from '../../hooks/useFilterHistory'
-import type { FilterOptionsDto, PerimeterDto } from '../../types'
+import type { FilterOptionsDto } from '../../types'
+import { useUiStore } from '../../store/uiStore'
 
 interface MainToolbarProps {
   hub: HubConnection
@@ -22,6 +23,7 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
   const { tabs, activeSessionId, updateTab } = useTabStore()
   const { perimeters, selectedPerimeterId } = usePerimeterStore()
   const { addEntry } = useFilterHistory()
+  const { theme, toggleTheme } = useUiStore()
 
   const activeTab = tabs.find(t => t.sessionId === activeSessionId)
   const tailMode = activeTab?.tailMode ?? true
@@ -78,86 +80,88 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
   }, [hub, activeSessionId, tailMode, updateTab])
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 bg-gray-800 border-b border-gray-700 flex-shrink-0">
-      {/* Logo + perimeter switcher */}
-      <span className="font-bold text-sm text-blue-400 mr-1 shrink-0">LogWatcher</span>
-      <button
-        onClick={onSwitchPerimeter}
-        title="Switch perimeter"
-        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0 max-w-[120px] truncate"
-      >
-        {selectedPerimeter?.name ?? 'Select…'} ▾
-      </button>
+    <header className="chrome-bar">
+      <div className="chrome-brand">
+        <div className="brand-kicker">Log operations</div>
+        <div className="brand-title">LogWatcher Web</div>
+        <div className="brand-subtitle">
+          {activeTab ? `${activeTab.displayName} on ${activeTab.serverName}` : 'Open a file to start inspecting logs'}
+        </div>
+      </div>
 
-      <div className="w-px h-4 bg-gray-600 mx-1" />
-
-      {/* Filter input */}
-      <input
-        className="flex-1 min-w-0 bg-gray-900 text-gray-100 text-xs font-mono px-2 py-1 rounded border border-gray-600
-                   focus:outline-none focus:border-blue-500 disabled:opacity-40"
-        placeholder={activeTab ? 'Filter (text or regex)…' : 'Open a log to filter'}
-        value={pattern}
-        disabled={!activeTab}
-        onChange={e => setPattern(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && applyFilter()}
-      />
-
-      {/* Regex toggle */}
-      <button
-        title="Regex"
-        onClick={() => setIsRegex(r => !r)}
-        className={`px-2 py-1 text-xs rounded font-mono shrink-0 ${isRegex ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-      >
-        .*
-      </button>
-
-      {/* Case sensitive */}
-      <button
-        title="Case sensitive"
-        onClick={() => setCaseSensitive(c => !c)}
-        className={`px-2 py-1 text-xs rounded shrink-0 ${caseSensitive ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-      >
-        Aa
-      </button>
-
-      <button
-        onClick={applyFilter}
-        disabled={isFiltering || !activeTab}
-        className="px-2 py-1 text-xs rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-40 shrink-0"
-      >
-        {isFiltering ? '…' : 'Filter'}
-      </button>
-
-      {activeTab?.isFiltered && (
-        <button
-          onClick={clearFilter}
-          className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600 shrink-0"
-        >
-          ✕ Clear
+      <div className="chrome-controls">
+        <button onClick={onSwitchPerimeter} title="Switch perimeter" className="control-button control-button--ghost">
+          <span className="control-label">Perimeter</span>
+          <span className="control-value">{selectedPerimeter?.name ?? 'Select…'}</span>
         </button>
-      )}
 
-      <div className="flex-1 min-w-0" />
+        <div className="toolbar-filter-cluster">
+          <input
+            className="control-input toolbar-filter-input"
+            placeholder={activeTab ? 'Filter by text or regex…' : 'Open a log to enable filtering'}
+            value={pattern}
+            disabled={!activeTab}
+            onChange={e => setPattern(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applyFilter()}
+          />
 
-      {/* Tail toggle */}
-      {activeTab && (
-        <button
-          onClick={toggleTail}
-          title={tailMode ? 'Following tail — click to pause' : 'Paused — click to follow tail'}
-          className={`px-2 py-1 text-xs rounded shrink-0 ${tailMode ? 'bg-green-700 text-white' : 'bg-gray-700 text-gray-400'}`}
-        >
-          {tailMode ? '⬇ Tail' : '⏸ Paused'}
-        </button>
-      )}
+          <button
+            title="Regex"
+            onClick={() => setIsRegex(r => !r)}
+            className={`control-chip ${isRegex ? 'control-chip--active' : ''}`}
+          >
+            Regex
+          </button>
 
-      <div className="w-px h-4 bg-gray-600 mx-1" />
+          <button
+            title="Case sensitive"
+            onClick={() => setCaseSensitive(c => !c)}
+            className={`control-chip ${caseSensitive ? 'control-chip--active' : ''}`}
+          >
+            Case
+          </button>
 
-      <button
-        onClick={onLogout}
-        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-400 hover:bg-gray-600 shrink-0"
-      >
-        Sign out
-      </button>
-    </div>
+          <button
+            onClick={applyFilter}
+            disabled={isFiltering || !activeTab}
+            className="control-button control-button--primary"
+          >
+            {isFiltering ? 'Applying…' : 'Apply'}
+          </button>
+
+          {activeTab?.isFiltered && (
+            <button onClick={clearFilter} className="control-button control-button--ghost">
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="toolbar-status-cluster">
+          {activeTab && (
+            <button onClick={toggleTail} className={`status-pill status-pill--action ${tailMode ? 'status-pill--ok' : ''}`}>
+              {tailMode ? 'Tail on' : 'Tail paused'}
+            </button>
+          )}
+
+          {activeTab && (
+            <span className="status-pill">{activeTab.totalLines.toLocaleString()} lines</span>
+          )}
+
+          {activeTab?.errorMessage && (
+            <span className="status-pill status-pill--danger" title={activeTab.errorMessage}>
+              {activeTab.errorMessage}
+            </span>
+          )}
+
+          <button onClick={toggleTheme} className="control-button control-button--ghost">
+            {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+          </button>
+
+          <button onClick={onLogout} className="control-button control-button--ghost">
+            Sign out
+          </button>
+        </div>
+      </div>
+    </header>
   )
 }

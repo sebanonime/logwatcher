@@ -52,6 +52,7 @@ export interface RemoteFileInfoDto {
   sizeBytes: number
   lastModified: string
   isDirectory: boolean
+  serverId: string
 }
 
 // ─── Highlighting rule (matches Common/Highlighting.cs) ────────────────────
@@ -81,6 +82,7 @@ export interface LogTab {
   newLinesCount: number   // lines added while user is scrolled up
   tailMode: boolean
   isFiltered: boolean
+  errorMessage?: string
 }
 
 

@@ -67,6 +67,7 @@ namespace LogWatcher.Web.Hubs
             => _sessions.SetProfileAsync(sessionId, profileName);
 
         /// <summary>
+        /// <summary>
         /// Returns a merged directory listing from all servers in the given root folder.
         /// subpath = "" means list at the server's Host root.
         /// </summary>
@@ -94,6 +95,9 @@ namespace LogWatcher.Web.Hubs
                         : Path.Combine(basePath, subpath).Replace('\\', '/');
 
                     var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
+                    // Set the server ID on each item so the frontend knows which server to use
+                    foreach (var item in items)
+                        item.ServerId = server.Id;
                     results.AddRange(items);
                 }
                 catch { /* skip unreachable servers */ }

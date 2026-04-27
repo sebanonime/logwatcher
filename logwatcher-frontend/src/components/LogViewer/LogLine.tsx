@@ -25,13 +25,13 @@ export const LogLine = memo(function LogLine({
     // Not yet loaded — show a placeholder shimmer
     return (
       <div
-        className="flex items-center px-2 h-5 font-mono text-xs text-gray-600 select-none"
+        className="log-row log-row--placeholder"
         style={{ minHeight: 20 }}
       >
-        <span className="w-12 text-right mr-4 text-gray-700 select-none shrink-0">
+        <span className="log-row__line-number">
           {lineNumber + 1}
         </span>
-        <span className="h-3 bg-gray-700 rounded animate-pulse w-48" />
+        <span className="log-row__placeholder" />
       </div>
     )
   }
@@ -53,16 +53,14 @@ export const LogLine = memo(function LogLine({
 
   return (
     <div
-      className={`flex items-center px-2 h-5 font-mono text-xs whitespace-pre cursor-pointer hover:bg-gray-800 ${
-        isSelected ? 'bg-blue-900' : ''
-      }`}
+      className={`log-row ${isSelected ? 'log-row--selected' : ''}`}
       style={{ minHeight: 20 }}
       onClick={onClick}
     >
-      <span className="w-12 text-right mr-4 text-gray-600 select-none shrink-0">
+      <span className="log-row__line-number">
         {lineNumber + 1}
       </span>
-      <span className="overflow-hidden text-ellipsis">{content}</span>
+      <span className="log-row__content">{content}</span>
     </div>
   )
 })

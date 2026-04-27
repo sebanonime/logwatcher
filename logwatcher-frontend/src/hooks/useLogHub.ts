@@ -20,11 +20,12 @@ export function useLogHub() {
 
     hub.on('OnNewLines', (sessionId: string, lines: LineDto[], totalLines: number) => {
       addLines(sessionId, lines)
-      updateTab(sessionId, { totalLines })
+      updateTab(sessionId, { totalLines, errorMessage: undefined })
     })
 
     hub.on('OnLines', (sessionId: string, lines: LineDto[]) => {
       addLines(sessionId, lines)
+      updateTab(sessionId, { errorMessage: undefined })
     })
 
     hub.on('OnFileStats', (sessionId: string, stats: FileStatsDto) => {
@@ -52,6 +53,7 @@ export function useLogHub() {
 
     hub.on('OnError', (sessionId: string, message: string) => {
       console.error(`[LogHub] session=${sessionId}:`, message)
+      updateTab(sessionId, { errorMessage: message })
     })
 
     startLogHub().catch(console.error)

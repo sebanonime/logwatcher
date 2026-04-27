@@ -20,6 +20,7 @@ namespace LogWatcher.Web.Sessions
 
         private readonly IFileSourceProvider _provider;
         private readonly IHubContext<Hubs.LogHub> _logHub;
+        private readonly string _openingConnectionId;
         private readonly LineIndex _index = new();
         private readonly LineIndexBuilder _builder = new();
         private FilteredLineIndex _filter;
@@ -33,7 +34,7 @@ namespace LogWatcher.Web.Sessions
 
         public WatchSession(string sessionId, string serverId, string filePath,
             IFileSourceProvider provider, IHubContext<Hubs.LogHub> logHub,
-            OpenLogOptionsDto options)
+            OpenLogOptionsDto options, string openingConnectionId)
         {
             SessionId = sessionId;
             ServerId = serverId;
@@ -41,6 +42,15 @@ namespace LogWatcher.Web.Sessions
             _provider = provider;
             _logHub = logHub;
             _encoding = Encoding.GetEncoding(options.Encoding ?? "UTF-8");
+            _openingConnectionId = openingConnectionId;
+        }
+
+        private async Task SendToGroupAndOpeningClientAsync(string method, params object[] args)
+        {
+            // SendCoreAsync takes object[] directly without params wrapping
+            await _logHub.Clients.Group(SessionId).SendCoreAsync(method, args);
+            if (!string.IsNullOrWhiteSpace(_openingConnectionId))
+                await _logHub.Clients.Client(_openingConnectionId).SendCoreAsync(method, args);
         }
 
         /// <summary>Start indexing and tailing the file.</summary>
@@ -52,17 +62,24 @@ namespace LogWatcher.Web.Sessions
             try
             {
                 // 1. Build the full line index
+                Console.WriteLine($"[WatchSession.RunAsync] Starting for {FilePath} (ServerId={ServerId}, SessionId={SessionId})");
+
                 var progress = new Progress<long>(bytesIndexed =>
                 {
                     _logHub.Clients.Group(SessionId)
                         .SendAsync("OnIndexProgress", SessionId, bytesIndexed, _index.TotalBytes, cancellationToken: ct);
                 });
 
+                Console.WriteLine($"[WatchSession.RunAsync] Calling ReadRawAsync for {FilePath}");
                 var rawStream = _provider.ReadRawAsync(FilePath, 0, ct);
+                
+                Console.WriteLine($"[WatchSession.RunAsync] Calling BuildAsync");
                 await _builder.BuildAsync(_index, rawStream, progress, ct);
+                Console.WriteLine($"[WatchSession.RunAsync] BuildAsync completed. Index.Count={_index.Count}, TotalBytes={_index.TotalBytes}");
 
                 // 2. Notify the client that the index is ready
-                await _logHub.Clients.Group(SessionId).SendAsync("OnFileStats", SessionId,
+                Console.WriteLine($"[WatchSession.RunAsync] Sending OnFileStats: TotalLines={_index.Count}, TotalBytes={_index.TotalBytes}");
+                await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                     new FileStatsDto
                     {
                         TotalLines = _index.Count,
@@ -70,7 +87,7 @@ namespace LogWatcher.Web.Sessions
                         IsIndexed = true,
                         ServerId = ServerId,
                         FilePath = FilePath
-                    }, cancellationToken: ct);
+                    });
 
                 // 2b. Push initial tail lines so client renders them immediately
                 //     without relying on the pull/RequestLines mechanism.
@@ -80,8 +97,8 @@ namespace LogWatcher.Web.Sessions
                     int initialCount = _index.Count - initialFrom;
                     var initialLines = await ReadLinesAsync(initialFrom, initialCount, ct);
                     if (initialLines.Length > 0)
-                        await _logHub.Clients.Group(SessionId).SendAsync(
-                            "OnNewLines", SessionId, initialLines, _index.Count, cancellationToken: ct);
+                        await SendToGroupAndOpeningClientAsync(
+                            "OnNewLines", SessionId, initialLines, _index.Count);
                 }
 
                 // 3. Tail new content
@@ -91,11 +108,11 @@ namespace LogWatcher.Web.Sessions
                     {
                         _index.Clear();
                         _filter = null;
-                        await _logHub.Clients.Group(SessionId).SendAsync("OnReload", SessionId, cancellationToken: ct);
+                        await SendToGroupAndOpeningClientAsync("OnReload", SessionId);
                         // Re-index from scratch
                         var reloadStream = _provider.ReadRawAsync(FilePath, 0, ct);
                         await _builder.BuildAsync(_index, reloadStream, null, ct);
-                        await _logHub.Clients.Group(SessionId).SendAsync("OnFileStats", SessionId,
+                        await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                             new FileStatsDto
                             {
                                 TotalLines = _index.Count,
@@ -103,7 +120,7 @@ namespace LogWatcher.Web.Sessions
                                 IsIndexed = true,
                                 ServerId = ServerId,
                                 FilePath = FilePath
-                            }, cancellationToken: ct);
+                            });
                         continue;
                     }
 
@@ -121,20 +138,18 @@ namespace LogWatcher.Web.Sessions
                     var newLines = await ReadLinesAsync(prevCount, newCount, ct);
                     if (_tailMode)
                     {
-                        await _logHub.Clients.Group(SessionId).SendAsync(
-                            "OnNewLines", SessionId, newLines, _index.Count, cancellationToken: ct);
+                        await SendToGroupAndOpeningClientAsync(
+                            "OnNewLines", SessionId, newLines, _index.Count);
                     }
                     // Always send updated stats so SizeBytes stays current
-                    await _logHub.Clients.Group(SessionId).SendAsync("OnFileStats", SessionId,
-                        new FileStatsDto { TotalLines = _index.Count, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath },
-                        cancellationToken: ct);
+                    await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                        new FileStatsDto { TotalLines = _index.Count, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath });
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                await _logHub.Clients.Group(SessionId)
-                    .SendAsync("OnError", SessionId, ex.Message);
+                await SendToGroupAndOpeningClientAsync("OnError", SessionId, ex.Message);
             }
         }
 

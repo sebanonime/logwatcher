@@ -18,31 +18,34 @@ export function FilterHistoryPanel({ onSelectPattern, refreshTick }: FilterHisto
   }, [getHistory, refreshTick])
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
-      <div className="flex items-center justify-between px-2 py-1 border-b border-gray-700">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filter History</span>
+    <div className="rail-panel-content">
+      <div className="section-header-row">
+        <div>
+          <div className="eyebrow">History</div>
+          <div className="section-title">Filter history</div>
+        </div>
         {history.length > 0 && (
           <button
             onClick={() => { clear(); setHistory([]) }}
-            className="text-xs text-gray-600 hover:text-gray-400"
+            className="control-button control-button--ghost"
           >
             Clear
           </button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="rail-scroll">
         {history.length === 0 && (
-          <div className="px-2 py-2 text-xs text-gray-600">No filter history yet.</div>
+          <div className="empty-state compact-empty-state">No filter history yet.</div>
         )}
         {history.map((pattern, i) => (
-          <div
+          <button
             key={i}
             onClick={() => onSelectPattern(pattern)}
-            className="px-2 py-1 text-xs font-mono text-gray-400 hover:bg-gray-700 hover:text-blue-400 cursor-pointer truncate"
+            className="history-chip"
             title={pattern}
           >
             {pattern}
-          </div>
+          </button>
         ))}
       </div>
     </div>

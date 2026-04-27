@@ -69,11 +69,12 @@ namespace LogWatcher.Web.Sessions
                 return;
             }
 
-            var session = new WatchSession(sessionId, serverId, filePath, provider, _logHub, options);
+            var session = new WatchSession(sessionId, serverId, filePath, provider, _logHub, options, connectionId);
             if (_sessions.TryAdd(sessionId, session))
             {
                 TrackConnection(connectionId, sessionId);
-                await session.StartAsync();
+                // Run watch loop in background so OpenLog returns immediately.
+                _ = session.StartAsync();
             }
         }
 

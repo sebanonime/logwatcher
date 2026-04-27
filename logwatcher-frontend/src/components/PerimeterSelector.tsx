@@ -10,7 +10,7 @@ interface PerimeterSelectorProps {
  * Full-screen perimeter chooser shown after login (and when switching perimeters).
  */
 export function PerimeterSelector({ onSelect }: PerimeterSelectorProps) {
-  const { perimeters, isFetching, fetchPerimeters } = usePerimeterStore()
+  const { perimeters, isFetching, fetchError, fetchPerimeters } = usePerimeterStore()
 
   useEffect(() => { fetchPerimeters() }, [fetchPerimeters])
 
@@ -25,7 +25,11 @@ export function PerimeterSelector({ onSelect }: PerimeterSelectorProps) {
         <p className="text-gray-500 text-sm animate-pulse">Loading...</p>
       )}
 
-      {!isFetching && perimeters.length === 0 && (
+      {!isFetching && fetchError && (
+        <p className="text-red-400 text-sm">{fetchError}</p>
+      )}
+
+      {!isFetching && !fetchError && perimeters.length === 0 && (
         <p className="text-gray-500 text-sm">No perimeters configured.</p>
       )}
 

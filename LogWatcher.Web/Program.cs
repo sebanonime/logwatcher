@@ -3,6 +3,8 @@ using LogWatcher.Web.Config;
 using LogWatcher.Web.Hubs;
 using LogWatcher.Web.Services;
 using LogWatcher.Web.Sessions;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -23,6 +25,10 @@ builder.Services.AddSignalR(opts =>
 {
     opts.MaximumReceiveMessageSize = 1024 * 1024; // 1 MB
     opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
+})
+.AddJsonProtocol(opts =>
+{
+    opts.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 });
 
 // ── Controllers + CORS (dev: allow Vite dev server) ───────────────────────

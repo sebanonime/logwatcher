@@ -26,39 +26,33 @@ export function DockArea({ hub }: DockAreaProps) {
 
   if (tabs.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-600 text-sm select-none">
-        Double-click a file in the browser to open a log
+      <div className="empty-state viewer-empty-state">
+        Double-click a file in the explorer to open a log workspace.
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Tab bar */}
-      <div className="flex items-center bg-gray-800 border-b border-gray-700 overflow-x-auto flex-shrink-0"
-           style={{ scrollbarWidth: 'none' }}>
+    <div className="dock-area">
+      <div className="tab-strip" style={{ scrollbarWidth: 'none' }}>
         {tabs.map(tab => {
           const isActive = activeSessionId === tab.sessionId
           return (
             <div
               key={tab.sessionId}
               onClick={() => setActive(tab.sessionId)}
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-mono cursor-pointer
-                          whitespace-nowrap border-r border-gray-700 flex-shrink-0 select-none
-                          ${isActive
-                            ? 'bg-gray-950 text-white border-t-2 border-t-blue-500'
-                            : 'text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+              className={`tab-pill ${isActive ? 'tab-pill--active' : ''}`}
             >
-              <span className="max-w-[180px] truncate" title={`[${tab.serverName}] ${tab.filePath}`}>
-                [{tab.serverName}] {tab.displayName}
+              <span className="tab-pill__meta">{tab.serverName}</span>
+              <span className="tab-pill__title" title={`[${tab.serverName}] ${tab.filePath}`}>
+                {tab.displayName}
               </span>
               {!tab.isIndexed && (
-                <span className="text-yellow-500 animate-pulse ml-1">●</span>
+                <span className="tab-pill__dot">●</span>
               )}
               <button
                 onClick={e => handleClose(e, tab.sessionId)}
-                className="ml-1 text-gray-500 hover:text-white w-4 h-4 flex items-center
-                           justify-center rounded hover:bg-gray-600 flex-shrink-0"
+                className="tab-pill__close"
                 title="Close"
               >
                 ×
@@ -68,16 +62,13 @@ export function DockArea({ hub }: DockAreaProps) {
         })}
       </div>
 
-      {/* Log viewers — all mounted, only active one visible */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="dock-content">
         {tabs.map(tab => (
           <div
             key={tab.sessionId}
+            className="dock-tab-view"
             style={{
-              position: 'absolute',
-              inset: 0,
               display: activeSessionId === tab.sessionId ? 'flex' : 'none',
-              flexDirection: 'column',
             }}
           >
             <LogViewer

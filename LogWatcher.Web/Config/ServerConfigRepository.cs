@@ -18,9 +18,19 @@ namespace LogWatcher.Web.Config
             WriteIndented = true,
         };
 
-        public ServerConfigRepository(IConfiguration config)
+        public ServerConfigRepository(IConfiguration config, IWebHostEnvironment env)
         {
-            _filePath = config["ServerConfig:Path"] ?? Path.Combine(AppContext.BaseDirectory, "servers.json");
+            var configuredPath = config["ServerConfig:Path"];
+            if (string.IsNullOrWhiteSpace(configuredPath))
+            {
+                _filePath = Path.Combine(env.ContentRootPath, "servers.json");
+            }
+            else
+            {
+                _filePath = Path.IsPathRooted(configuredPath)
+                    ? configuredPath
+                    : Path.Combine(env.ContentRootPath, configuredPath);
+            }
             _perimeters = Load();
         }
 

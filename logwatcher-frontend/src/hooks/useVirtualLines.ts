@@ -13,7 +13,7 @@ const PREFETCH_BEHIND = 150  // lines to load behind viewport
  */
 export function useVirtualLines(sessionId: string, hub: HubConnection) {
   const { getLine, buffers } = useLogStore()
-  const { tabs } = useTabStore()
+  const { tabs, updateTab } = useTabStore()
   const tab = tabs.find(t => t.sessionId === sessionId)
   const totalLines = tab?.totalLines ?? 0
 
@@ -43,8 +43,13 @@ export function useVirtualLines(sessionId: string, hub: HubConnection) {
     const chunkCount = chunkEnd - chunkStart + 1
 
     hub.invoke('RequestLines', sessionId, chunkStart, chunkCount)
+      .then(() => updateTab(sessionId, { errorMessage: undefined }))
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Failed to request lines from server'
+        updateTab(sessionId, { errorMessage: msg })
+      })
       .finally(() => inFlight.current.delete(chunkStart))
-  }, [sessionId, totalLines, buffers, hub])
+  }, [sessionId, totalLines, buffers, hub, updateTab])
 
   const getLineText = useCallback((lineNumber: number): string | undefined => {
     return getLine(sessionId, lineNumber)

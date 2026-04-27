@@ -1,17 +1,31 @@
+using System.Text.Json.Serialization;
+
 namespace LogWatcher.Web.Dto
 {
     public class LineDto
     {
+        [JsonPropertyName("lineNumber")]
         public int LineNumber { get; set; }
+        
+        [JsonPropertyName("text")]
         public string Text { get; set; }
     }
 
     public class FileStatsDto
     {
+        [JsonPropertyName("totalLines")]
         public int TotalLines { get; set; }
+        
+        [JsonPropertyName("sizeBytes")]
         public long SizeBytes { get; set; }
+        
+        [JsonPropertyName("isIndexed")]
         public bool IsIndexed { get; set; }
+        
+        [JsonPropertyName("serverId")]
         public string ServerId { get; set; }
+        
+        [JsonPropertyName("filePath")]
         public string FilePath { get; set; }
     }
 
@@ -36,5 +50,6 @@ namespace LogWatcher.Web.Dto
         public long SizeBytes { get; set; }
         public DateTimeOffset LastModified { get; set; }
         public bool IsDirectory { get; set; }
+        public string ServerId { get; set; }
     }
 }

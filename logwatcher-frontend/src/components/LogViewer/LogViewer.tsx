@@ -21,8 +21,8 @@ export function LogViewer({ sessionId, hub, highlightingRules = [] }: LogViewerP
   const tab = tabs.find(t => t.sessionId === sessionId)
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
-      <div className="flex-1 min-h-0">
+    <div className="log-viewer-root">
+      <div className="log-viewer-body">
         <LogVirtualList
           sessionId={sessionId}
           hub={hub}

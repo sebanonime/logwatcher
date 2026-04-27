@@ -11,16 +11,19 @@ export function LogStatusBar({ sessionId }: LogStatusBarProps) {
   if (!tab) return null
 
   return (
-    <div className="flex items-center gap-4 px-2 py-0.5 bg-gray-900 border-t border-gray-700 text-xs text-gray-500 flex-shrink-0">
-      <span>{tab.totalLines.toLocaleString()} lines</span>
-      <span>{formatBytes(tab.sizeBytes)}</span>
-      {!tab.isIndexed && <span className="text-yellow-500 animate-pulse">Indexing…</span>}
-      {tab.isFiltered && <span className="text-blue-400">Filtered</span>}
+    <div className="log-status-bar">
+      <span className="status-pill">{tab.totalLines.toLocaleString()} lines</span>
+      <span className="status-pill">{formatBytes(tab.sizeBytes)}</span>
+      {!tab.isIndexed && <span className="status-pill status-pill--warn">Indexing…</span>}
+      {tab.isFiltered && <span className="status-pill">Filtered</span>}
       {tab.newLinesCount > 0 && (
-        <span className="text-green-400">+{tab.newLinesCount} new lines</span>
+        <span className="status-pill status-pill--ok">+{tab.newLinesCount} new lines</span>
+      )}
+      {tab.errorMessage && (
+        <span className="status-pill status-pill--danger" title={tab.errorMessage}>{tab.errorMessage}</span>
       )}
       <span className="flex-1" />
-      <span className="text-gray-600">{tab.serverName} · {tab.filePath}</span>
+      <span className="log-status-path">{tab.serverName} · {tab.filePath}</span>
     </div>
   )
 }

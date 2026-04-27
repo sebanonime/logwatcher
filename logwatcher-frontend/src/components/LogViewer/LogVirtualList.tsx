@@ -59,7 +59,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, tailMode }: 
   return (
     <div
       ref={parentRef}
-      className="h-full overflow-auto bg-gray-950 select-text"
+      className="log-virtual-list"
     >
       <div
         style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
