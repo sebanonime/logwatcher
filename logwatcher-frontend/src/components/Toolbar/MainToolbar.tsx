@@ -85,8 +85,7 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
 
       <div className="chrome-controls">
         <button onClick={onSwitchPerimeter} title="Switch perimeter" className="control-button control-button--ghost">
-          <span className="control-label">Perimeter</span>
-          <span className="control-value">{selectedPerimeter?.name ?? 'Select…'}</span>
+          <span className="control-value">{selectedPerimeter?.name ?? 'Perimeter'}</span>
         </button>
 
         <div className="toolbar-filter-cluster">
@@ -104,12 +103,12 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
             disabled={isFiltering || !activeTab}
             className="control-button control-button--primary"
           >
-            {isFiltering ? 'Applying…' : 'Apply'}
+            {isFiltering ? '...' : 'Go'}
           </button>
 
           {activeTab?.isFiltered && (
             <button onClick={clearFilter} className="control-button control-button--ghost">
-              Clear
+              X
             </button>
           )}
         </div>
@@ -117,7 +116,7 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
         <div className="toolbar-status-cluster">
           {activeTab && (
             <button onClick={toggleTail} className={`status-pill status-pill--action ${tailMode ? 'status-pill--ok' : ''}`}>
-              {tailMode ? 'Tail on' : 'Tail paused'}
+              {tailMode ? 'Tail' : 'Pause'}
             </button>
           )}
 
@@ -128,11 +127,11 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
           )}
 
           <button onClick={toggleTheme} className="control-button control-button--ghost">
-            {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+            {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
 
           <button onClick={onLogout} className="control-button control-button--ghost">
-            Sign out
+            Out
           </button>
         </div>
       </div>
