@@ -29,8 +29,6 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
   const tailMode = activeTab?.tailMode ?? true
 
   const [pattern, setPattern] = useState('')
-  const [isRegex, setIsRegex] = useState(false)
-  const [caseSensitive, setCaseSensitive] = useState(false)
   const [isFiltering, setIsFiltering] = useState(false)
 
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
@@ -58,12 +56,12 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
     }
     setIsFiltering(true)
     addEntry(pattern.trim())
-    const filter: FilterOptionsDto = { pattern: pattern.trim(), isRegex, caseSensitive }
+    const filter: FilterOptionsDto = { pattern: pattern.trim(), isRegex: true, caseSensitive: false }
     await hub.invoke('SetFilter', activeSessionId, filter)
     updateTab(activeSessionId, { isFiltered: true })
     setIsFiltering(false)
     onFilterApplied?.()
-  }, [hub, activeSessionId, pattern, isRegex, caseSensitive, updateTab, addEntry, onFilterApplied])
+  }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied])
 
   const clearFilter = useCallback(async () => {
     if (!activeSessionId) return
@@ -82,11 +80,7 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
   return (
     <header className="chrome-bar">
       <div className="chrome-brand">
-        <div className="brand-kicker">Log operations</div>
         <div className="brand-title">LogWatcher Web</div>
-        <div className="brand-subtitle">
-          {activeTab ? `${activeTab.displayName} on ${activeTab.serverName}` : 'Open a file to start inspecting logs'}
-        </div>
       </div>
 
       <div className="chrome-controls">
@@ -98,28 +92,12 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
         <div className="toolbar-filter-cluster">
           <input
             className="control-input toolbar-filter-input"
-            placeholder={activeTab ? 'Filter by text or regex…' : 'Open a log to enable filtering'}
+            placeholder={activeTab ? 'Regex filter…' : 'Open a log to enable filtering'}
             value={pattern}
             disabled={!activeTab}
             onChange={e => setPattern(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && applyFilter()}
           />
-
-          <button
-            title="Regex"
-            onClick={() => setIsRegex(r => !r)}
-            className={`control-chip ${isRegex ? 'control-chip--active' : ''}`}
-          >
-            Regex
-          </button>
-
-          <button
-            title="Case sensitive"
-            onClick={() => setCaseSensitive(c => !c)}
-            className={`control-chip ${caseSensitive ? 'control-chip--active' : ''}`}
-          >
-            Case
-          </button>
 
           <button
             onClick={applyFilter}
@@ -141,10 +119,6 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
             <button onClick={toggleTail} className={`status-pill status-pill--action ${tailMode ? 'status-pill--ok' : ''}`}>
               {tailMode ? 'Tail on' : 'Tail paused'}
             </button>
-          )}
-
-          {activeTab && (
-            <span className="status-pill">{activeTab.totalLines.toLocaleString()} lines</span>
           )}
 
           {activeTab?.errorMessage && (

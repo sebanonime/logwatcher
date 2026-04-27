@@ -15,7 +15,7 @@ interface LogLineProps {
  * Falls back to plain text rendering for unloaded lines (shows a loading placeholder).
  */
 export const LogLine = memo(function LogLine({
-  lineNumber,
+  lineNumber: _lineNumber,
   text,
   segments,
   isSelected,
@@ -28,9 +28,6 @@ export const LogLine = memo(function LogLine({
         className="log-row log-row--placeholder"
         style={{ minHeight: 20 }}
       >
-        <span className="log-row__line-number">
-          {lineNumber + 1}
-        </span>
         <span className="log-row__placeholder" />
       </div>
     )
@@ -57,9 +54,6 @@ export const LogLine = memo(function LogLine({
       style={{ minHeight: 20 }}
       onClick={onClick}
     >
-      <span className="log-row__line-number">
-        {lineNumber + 1}
-      </span>
       <span className="log-row__content">{content}</span>
     </div>
   )
