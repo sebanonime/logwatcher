@@ -92,74 +92,115 @@ function HighlightListEditor({
   rules: HighlightingRule[]
   onChange: (rules: HighlightingRule[]) => void
 }) {
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(rules.length > 0 ? 0 : null)
+
+  useEffect(() => {
+    if (rules.length === 0) {
+      setSelectedIndex(null)
+      return
+    }
+    if (selectedIndex === null || selectedIndex >= rules.length)
+      setSelectedIndex(0)
+  }, [rules, selectedIndex])
+
   const updateRule = (index: number, patch: Partial<HighlightingRule>) => {
     onChange(rules.map((rule, current) => current === index ? { ...rule, ...patch } : rule))
   }
 
   const removeRule = (index: number) => {
-    onChange(rules.filter((_, current) => current !== index).map((rule, order) => ({ ...rule, order })))
+    const nextRules = rules.filter((_, current) => current !== index).map((rule, order) => ({ ...rule, order }))
+    onChange(nextRules)
+    if (nextRules.length === 0) {
+      setSelectedIndex(null)
+    } else if (selectedIndex !== null && selectedIndex >= nextRules.length) {
+      setSelectedIndex(nextRules.length - 1)
+    }
   }
 
   const addRule = () => {
     onChange([...rules, emptyHighlight(rules.length)])
+    setSelectedIndex(rules.length)
   }
+
+  const selectedRule = selectedIndex === null ? null : (rules[selectedIndex] ?? null)
+  const darkBgAuto = selectedRule ? !selectedRule.darkBackColorArgb : true
+  const lightBgAuto = selectedRule ? !selectedRule.lightBackColorArgb : true
 
   return (
     <section className="settings-card">
       <div className="settings-card__header">
         <h3>{title}</h3>
-        <button className="control-button control-button--ghost" onClick={addRule}>Add highlight</button>
+        <div className="settings-actions-row">
+          <button className="control-button control-button--ghost" onClick={addRule}>Add highlight</button>
+          <button
+            className="control-button control-button--ghost"
+            onClick={() => selectedIndex !== null && removeRule(selectedIndex)}
+            disabled={selectedIndex === null}
+          >
+            Delete selected
+          </button>
+        </div>
       </div>
+
+      {selectedRule ? (
+        <div className="highlight-editor-pane">
+          <div className="highlight-editor-controls">
+            <input
+              className="control-input"
+              value={selectedRule.text}
+              placeholder="Pattern"
+              onChange={event => updateRule(selectedIndex!, { text: event.target.value })}
+            />
+            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.isRegex} onChange={event => updateRule(selectedIndex!, { isRegex: event.target.checked })} />Regex</label>
+            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.caseSensitive} onChange={event => updateRule(selectedIndex!, { caseSensitive: event.target.checked })} />Case</label>
+            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.bold} onChange={event => updateRule(selectedIndex!, { bold: event.target.checked })} />Bold</label>
+            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.hightPriority} onChange={event => updateRule(selectedIndex!, { hightPriority: event.target.checked })} />Priority</label>
+            <div className="highlight-color-pair">
+              <span>Dark</span>
+              <input
+                type="color"
+                value={argbToHex(selectedRule.darkForeColorArgb ?? selectedRule.foreColorArgb, '#ffffff')}
+                onChange={event => updateRule(selectedIndex!, { darkForeColorArgb: hexToArgb(event.target.value) })}
+              />
+              <input
+                type="color"
+                value={argbToHex(selectedRule.darkBackColorArgb, '#1b2533')}
+                disabled={darkBgAuto}
+                onChange={event => updateRule(selectedIndex!, { darkBackColorArgb: hexToArgb(event.target.value) })}
+              />
+              <label className="settings-inline-check"><input type="checkbox" checked={darkBgAuto} onChange={event => updateRule(selectedIndex!, { darkBackColorArgb: event.target.checked ? 0 : hexToArgb('#1b2533') })} />Auto BG</label>
+            </div>
+            <div className="highlight-color-pair">
+              <span>Light</span>
+              <input
+                type="color"
+                value={argbToHex(selectedRule.lightForeColorArgb ?? selectedRule.foreColorArgb, '#000000')}
+                onChange={event => updateRule(selectedIndex!, { lightForeColorArgb: hexToArgb(event.target.value) })}
+              />
+              <input
+                type="color"
+                value={argbToHex(selectedRule.lightBackColorArgb, '#ffffff')}
+                disabled={lightBgAuto}
+                onChange={event => updateRule(selectedIndex!, { lightBackColorArgb: hexToArgb(event.target.value) })}
+              />
+              <label className="settings-inline-check"><input type="checkbox" checked={lightBgAuto} onChange={event => updateRule(selectedIndex!, { lightBackColorArgb: event.target.checked ? 0 : hexToArgb('#ffffff') })} />Auto BG</label>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="empty-state compact-empty-state">Select or add a highlight rule.</div>
+      )}
+
       <div className="highlight-editor-list">
         {rules.length === 0 && <div className="empty-state compact-empty-state">No highlights configured.</div>}
         {rules.map((rule, index) => {
-          const darkBgAuto = !rule.darkBackColorArgb
-          const lightBgAuto = !rule.lightBackColorArgb
           return (
-            <div key={`${title}-${index}`} className="highlight-editor-row">
-              <div className="highlight-editor-controls">
-                <input
-                  className="control-input"
-                  value={rule.text}
-                  placeholder="Pattern"
-                  onChange={event => updateRule(index, { text: event.target.value })}
-                />
-                <label className="settings-inline-check"><input type="checkbox" checked={rule.isRegex} onChange={event => updateRule(index, { isRegex: event.target.checked })} />Regex</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={rule.caseSensitive} onChange={event => updateRule(index, { caseSensitive: event.target.checked })} />Case</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={rule.bold} onChange={event => updateRule(index, { bold: event.target.checked })} />Bold</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={rule.hightPriority} onChange={event => updateRule(index, { hightPriority: event.target.checked })} />Priority</label>
-                <div className="highlight-color-pair">
-                  <span>Dark</span>
-                  <input
-                    type="color"
-                    value={argbToHex(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff')}
-                    onChange={event => updateRule(index, { darkForeColorArgb: hexToArgb(event.target.value) })}
-                  />
-                  <input
-                    type="color"
-                    value={argbToHex(rule.darkBackColorArgb, '#1b2533')}
-                    disabled={darkBgAuto}
-                    onChange={event => updateRule(index, { darkBackColorArgb: hexToArgb(event.target.value) })}
-                  />
-                  <label className="settings-inline-check"><input type="checkbox" checked={darkBgAuto} onChange={event => updateRule(index, { darkBackColorArgb: event.target.checked ? 0 : hexToArgb('#1b2533') })} />Auto BG</label>
-                </div>
-                <div className="highlight-color-pair">
-                  <span>Light</span>
-                  <input
-                    type="color"
-                    value={argbToHex(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000')}
-                    onChange={event => updateRule(index, { lightForeColorArgb: hexToArgb(event.target.value) })}
-                  />
-                  <input
-                    type="color"
-                    value={argbToHex(rule.lightBackColorArgb, '#ffffff')}
-                    disabled={lightBgAuto}
-                    onChange={event => updateRule(index, { lightBackColorArgb: hexToArgb(event.target.value) })}
-                  />
-                  <label className="settings-inline-check"><input type="checkbox" checked={lightBgAuto} onChange={event => updateRule(index, { lightBackColorArgb: event.target.checked ? 0 : hexToArgb('#ffffff') })} />Auto BG</label>
-                </div>
-                <button className="control-button control-button--ghost" onClick={() => removeRule(index)}>Delete</button>
-              </div>
+            <button
+              type="button"
+              key={`${title}-${index}`}
+              className={`highlight-editor-row highlight-editor-row--compact ${selectedIndex === index ? 'highlight-editor-row--active' : ''}`}
+              onClick={() => setSelectedIndex(index)}
+            >
               <div className="highlight-preview">
                 <div className="highlight-preview-swatch highlight-preview-swatch--dark">
                   <span className="highlight-preview-label">◑ Dark</span>
@@ -178,7 +219,7 @@ function HighlightListEditor({
                   }}>{rule.text || 'Sample text'}</span>
                 </div>
               </div>
-            </div>
+            </button>
           )
         })}
       </div>

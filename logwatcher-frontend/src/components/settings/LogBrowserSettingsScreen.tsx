@@ -105,7 +105,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
     if (!selectedPerimeterId) return
     const trimmedName = rootName.trim()
     if (!trimmedName) {
-      setError('Root name is required.')
+      setError('Environment name is required.')
       return
     }
 
@@ -113,7 +113,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
       root.name !== selectedRootName && root.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
     )
     if (rootNameExists) {
-      setError(`Root '${trimmedName}' already exists.`)
+      setError(`Environment '${trimmedName}' already exists.`)
       return
     }
 
@@ -219,7 +219,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
           <section className="settings-card">
             <div className="settings-card__header">
-              <h3>Environments / roots</h3>
+              <h3>Environments</h3>
               <button className="control-button control-button--ghost" onClick={() => { setSelectedRootName(null); setRootName(''); }}>New</button>
             </div>
             <div className="settings-list-panel">
@@ -235,7 +235,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
             </div>
             <div className="settings-form-grid">
               <label>
-                Root name
+                Environment name
                 <input className="control-input" value={rootName} onChange={event => setRootName(event.target.value)} />
               </label>
             </div>

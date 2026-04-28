@@ -9,13 +9,12 @@ import { useUiStore } from '../store/uiStore'
 
 interface MainLayoutProps {
   hub: HubConnection
-  onSwitchPerimeter: () => void
   onOpenPreferences: () => void
   onOpenLogBrowserSettings: () => void
   onLogout: () => void
 }
 
-export function MainLayout({ hub, onSwitchPerimeter, onOpenPreferences, onOpenLogBrowserSettings, onLogout }: MainLayoutProps) {
+export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings, onLogout }: MainLayoutProps) {
   const [filterRefreshTick, setFilterRefreshTick] = useState(0)
   const [pendingPattern, setPendingPattern] = useState<string | null>(null)
   const [isBrowserVisible, setIsBrowserVisible] = useState(true)
@@ -48,7 +47,6 @@ export function MainLayout({ hub, onSwitchPerimeter, onOpenPreferences, onOpenLo
     <div className="app-shell">
       <MainToolbar
         hub={hub}
-        onSwitchPerimeter={onSwitchPerimeter}
         onOpenPreferences={onOpenPreferences}
         onLogout={onLogout}
         onFilterApplied={handleFilterApplied}

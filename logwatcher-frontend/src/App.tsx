@@ -47,7 +47,6 @@ function LoggedInApp({ onLogout }: { onLogout: () => void }) {
     <>
       <MainLayout
         hub={hub}
-        onSwitchPerimeter={() => {}}
         onOpenPreferences={() => setShowPreferences(true)}
         onOpenLogBrowserSettings={() => setShowLogBrowserSettings(true)}
         onLogout={onLogout}

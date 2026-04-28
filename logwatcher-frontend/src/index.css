@@ -107,7 +107,7 @@ select {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 6px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 8px;
 }
 
@@ -178,7 +178,8 @@ select {
 }
 
 .control-input {
-  padding: 3px 6px;
+  padding: 4px 8px;
+  min-height: 28px;
   outline: none;
 }
 
@@ -193,7 +194,9 @@ select {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  padding: 3px 6px;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 4px 8px;
   cursor: pointer;
 }
 
@@ -379,6 +382,37 @@ select {
   gap: 4px;
   min-height: 0;
   height: 100%;
+}
+
+.browser-stack-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.browser-stack-block {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-3);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.browser-stack-block--fill {
+  flex: 1;
+  min-height: 0;
+}
+
+.browser-stack-block--fill .browser-list {
+  flex: 1;
+}
+
+.browser-perimeter-select {
+  width: 100%;
 }
 
 .browser-column,
@@ -1031,13 +1065,29 @@ select {
 }
 
 .highlight-editor-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-3);
-  padding: 6px;
   border-radius: 6px;
+}
+
+.highlight-editor-row--compact {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.highlight-editor-row--active {
+  border-color: var(--accent-2);
+  background: rgba(124, 183, 255, 0.12);
+}
+
+.highlight-editor-pane {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-3);
+  border-radius: 6px;
+  padding: 6px;
 }
 
 .highlight-editor-controls {

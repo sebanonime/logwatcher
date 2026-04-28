@@ -17,7 +17,7 @@ interface DockAreaProps {
  * virtual scroll state and line buffers are preserved on tab switch.
  */
 export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaProps) {
-  const { tabs, activeSessionId, setActive, removeTab, updateTab } = useTabStore()
+  const { tabs, activeSessionId, setActive, removeTab } = useTabStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const hubRef = useRef(hub)
   hubRef.current = hub
@@ -59,8 +59,6 @@ export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaPro
         </button>
         {tabs.map(tab => {
           const isActive = activeSessionId === tab.sessionId
-          const profileOptions = profiles
-          const selectedProfileName = tab.activeProfileName ?? ''
           return (
             <div
               key={tab.sessionId}
@@ -72,31 +70,6 @@ export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaPro
               </span>
               {!tab.isIndexed && (
                 <span className="tab-pill__dot">●</span>
-              )}
-              {isActive && (
-                <select
-                  className="control-input tab-pill__profile"
-                  value={selectedProfileName}
-                  onClick={event => event.stopPropagation()}
-                  onChange={async event => {
-                    const nextName = event.target.value || undefined
-                    updateTab(tab.sessionId, {
-                      activeProfileName: nextName,
-                      activeStoredFilterName: undefined,
-                    })
-                    try {
-                      await hubRef.current.invoke('SetProfile', tab.sessionId, nextName ?? '')
-                    } catch {
-                      // Ignore profile switch transport errors in UI.
-                    }
-                  }}
-                  title="Active profile"
-                >
-                  <option value="">Default</option>
-                  {profileOptions.map(profile => (
-                    <option key={profile.name} value={profile.name}>{profile.name}</option>
-                  ))}
-                </select>
               )}
               <button
                 onClick={e => handleClose(e, tab.sessionId)}

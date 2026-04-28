@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import type { HubConnection } from '@microsoft/signalr'
 import { useTabStore } from '../../store/logStore'
-import { usePerimeterStore } from '../../store/perimeterStore'
 import { useFilterHistory } from '../../hooks/useFilterHistory'
 import type { FilterOptionsDto } from '../../types'
 import { useLogStore } from '../../store/logStore'
@@ -9,7 +8,6 @@ import { usePreferencesStore } from '../../store/preferencesStore'
 
 interface MainToolbarProps {
   hub: HubConnection
-  onSwitchPerimeter: () => void
   onOpenPreferences: () => void
   onLogout: () => void
   onFilterApplied?: () => void
@@ -18,12 +16,11 @@ interface MainToolbarProps {
 }
 
 /**
- * Top toolbar: perimeter selector + filter controls for the active log tab + tail toggle.
+ * Top toolbar: profile + filter controls for the active log tab + tail toggle.
  */
-export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
+export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
   const { tabs, activeSessionId, updateTab, setActive } = useTabStore()
   const { setSelectedLine, getLine, clearBuffer } = useLogStore()
-  const { perimeters, selectedPerimeterId, selectPerimeter } = usePerimeterStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const { addEntry } = useFilterHistory()
 
@@ -40,13 +37,6 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
 
   const [pattern, setPattern] = useState('')
   const [isFiltering, setIsFiltering] = useState(false)
-
-  const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
-
-  const handlePerimeterChange = useCallback((newPerimeterId: string) => {
-    selectPerimeter(newPerimeterId)
-    localStorage.setItem('logwatcher_last_perimeter', newPerimeterId)
-  }, [selectPerimeter])
 
   // Reset filter state when active tab changes
   useEffect(() => {
@@ -67,6 +57,45 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
       onPendingPatternConsumed?.()
     }
   }, [pendingPattern, onPendingPatternConsumed])
+
+  const applyStoredFilterNow = useCallback(async (storedFilterName?: string) => {
+    if (!activeSessionId || !activeProfile) return
+    const selectedFilter = activeProfile.dicoStoredFilter.find(filter => filter.name === storedFilterName)
+    setPattern(selectedFilter?.filter ?? '')
+
+    clearBuffer(activeSessionId)
+    updateTab(activeSessionId, { totalLines: 0 })
+
+    if (!selectedFilter?.filter?.trim()) {
+      await hub.invoke('ClearFilter', activeSessionId)
+      clearBuffer(activeSessionId)
+      updateTab(activeSessionId, { isFiltered: false })
+      return
+    }
+
+    const filter: FilterOptionsDto = {
+      pattern: selectedFilter.filter,
+      isRegex: selectedFilter.isRegex,
+      caseSensitive: selectedFilter.caseSensitive,
+      hiddenLines: (activeProfile.dicoHiddenLog ?? []).map(h => ({
+        text: h.text,
+        isRegex: h.isRegex,
+        caseSensitive: h.caseSensitive,
+        isActive: h.isActif,
+      })),
+    }
+
+    setIsFiltering(true)
+    try {
+      addEntry(selectedFilter.filter.trim())
+      await hub.invoke('SetFilter', activeSessionId, filter)
+      clearBuffer(activeSessionId)
+      updateTab(activeSessionId, { isFiltered: true })
+      onFilterApplied?.()
+    } finally {
+      setIsFiltering(false)
+    }
+  }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, addEntry, onFilterApplied])
 
   const applyFilter = useCallback(async () => {
     if (!activeSessionId) return
@@ -204,19 +233,58 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
       </div>
 
       <div className="chrome-controls">
-        <select
-          className="control-input"
-          value={selectedPerimeterId ?? ''}
-          onChange={e => handlePerimeterChange(e.target.value)}
-          title="Select perimeter"
-        >
-          <option value="">Select perimeter</option>
-          {perimeters.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-
         <div className="toolbar-filter-cluster">
+          {activeTab && (
+            <select
+              className="control-input"
+              value={activeTab.activeProfileName ?? ''}
+              onChange={async event => {
+                if (!activeSessionId) return
+                const nextProfileName = event.target.value || undefined
+                updateTab(activeSessionId, {
+                  activeProfileName: nextProfileName,
+                  activeStoredFilterName: undefined,
+                })
+                setPattern('')
+                clearBuffer(activeSessionId)
+                updateTab(activeSessionId, { totalLines: 0 })
+                await hub.invoke('ClearFilter', activeSessionId)
+                clearBuffer(activeSessionId)
+                updateTab(activeSessionId, { isFiltered: false })
+                try {
+                  await hub.invoke('SetProfile', activeSessionId, nextProfileName ?? '')
+                } catch {
+                  // Ignore profile switch transport errors in UI.
+                }
+              }}
+              title="Profile"
+            >
+              <option value="">Default profile</option>
+              {profiles.map(profile => (
+                <option key={profile.name} value={profile.name}>{profile.name}</option>
+              ))}
+            </select>
+          )}
+
+          {activeProfile && (
+            <select
+              className="control-input"
+              value={activeTab?.activeStoredFilterName ?? ''}
+              onChange={async event => {
+                if (!activeSessionId) return
+                const nextFilterName = event.target.value || undefined
+                updateTab(activeSessionId, { activeStoredFilterName: nextFilterName })
+                await applyStoredFilterNow(nextFilterName)
+              }}
+              title="Stored filters"
+            >
+              <option value="">Stored filter</option>
+              {activeProfile.dicoStoredFilter.map(filter => (
+                <option key={filter.name} value={filter.name}>{filter.name}</option>
+              ))}
+            </select>
+          )}
+
           <input
             className="control-input toolbar-filter-input"
             placeholder={activeTab ? 'Regex filter…' : 'Open a log to enable filtering'}
@@ -252,26 +320,6 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
         </div>
 
         <div className="toolbar-status-cluster">
-          {activeProfile && (
-            <select
-              className="control-input"
-              value={activeTab?.activeStoredFilterName ?? ''}
-              onChange={event => {
-                if (!activeSessionId) return
-                const nextFilterName = event.target.value || undefined
-                updateTab(activeSessionId, { activeStoredFilterName: nextFilterName })
-                const filter = activeProfile.dicoStoredFilter.find(item => item.name === nextFilterName)
-                setPattern(filter?.filter ?? '')
-              }}
-              title="Stored filters"
-            >
-              <option value="">Stored filter</option>
-              {activeProfile.dicoStoredFilter.map(filter => (
-                <option key={filter.name} value={filter.name}>{filter.name}</option>
-              ))}
-            </select>
-          )}
-
           {activeTab && (
             <button onClick={toggleTail} className={`status-pill status-pill--action ${tailMode ? 'status-pill--ok' : ''}`}>
               {tailMode ? 'Tail' : 'Pause'}

@@ -45,7 +45,7 @@ function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | nu
  * └────────────────────────────────┘
  */
 export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const { perimeters, selectedPerimeterId } = usePerimeterStore()
+  const { perimeters, selectedPerimeterId, selectPerimeter } = usePerimeterStore()
   const {
     selectedRootFolder, subfolders, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
@@ -55,6 +55,11 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { addTab, removeTab } = useTabStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
+
+  const handlePerimeterChange = useCallback((newPerimeterId: string) => {
+    selectPerimeter(newPerimeterId)
+    localStorage.setItem('logwatcher_last_perimeter', newPerimeterId)
+  }, [selectPerimeter])
 
   const handleSelectRoot = useCallback((rootName: string) => {
     if (!selectedPerimeterId) return
@@ -130,18 +135,39 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
           <Panel defaultSize={58} minSize={28}>
             <div className="browser-columns">
               <div className="browser-column browser-column--roots">
-                <div className="section-label">Roots</div>
-                <div className="browser-list">
-                  {selectedPerimeter?.rootFolders.map(root => (
-                    <button
-                      key={root.name}
-                      onClick={() => handleSelectRoot(root.name)}
-                      className={`browser-item browser-item--block ${selectedRootFolder === root.name ? 'browser-item--active' : ''}`}
-                      title={root.name}
-                    >
-                      <span className="browser-item-title">{root.name}</span>
-                    </button>
-                  ))}
+                <div className="browser-stack-list">
+                  <div className="browser-stack-block">
+                    <div className="section-label">Perimeter</div>
+                    <div className="browser-filter-row">
+                      <select
+                        className="control-input browser-perimeter-select"
+                        value={selectedPerimeterId ?? ''}
+                        onChange={event => handlePerimeterChange(event.target.value)}
+                        title="Select perimeter"
+                      >
+                        <option value="">Select perimeter</option>
+                        {perimeters.map(perimeter => (
+                          <option key={perimeter.id} value={perimeter.id}>{perimeter.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="browser-stack-block browser-stack-block--fill">
+                    <div className="section-label">Environment</div>
+                    <div className="browser-list">
+                      {selectedPerimeter?.rootFolders.map(root => (
+                        <button
+                          key={root.name}
+                          onClick={() => handleSelectRoot(root.name)}
+                          className={`browser-item browser-item--block ${selectedRootFolder === root.name ? 'browser-item--active' : ''}`}
+                          title={root.name}
+                        >
+                          <span className="browser-item-title">{root.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
