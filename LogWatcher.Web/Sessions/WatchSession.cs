@@ -158,23 +158,38 @@ namespace LogWatcher.Web.Sessions
             var (offsets, actual) = _index.GetRange(startLine, count);
             if (actual == 0) return Array.Empty<LineDto>();
 
+            // Calculate the byte span covering all requested lines in one go
+            long firstOffset = offsets[0];
+            int lastLineNum = startLine + actual - 1;
+            int lastByteLen = _index.GetLineByteLength(lastLineNum);
+            if (lastByteLen <= 0) lastByteLen = 0;
+            long lastOffset = offsets[actual - 1];
+            long endOffset = lastOffset + lastByteLen;
+
+            if (endOffset <= firstOffset)
+                return Array.Empty<LineDto>();
+
+            // Single I/O read for the whole chunk
+            var block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
+
             var results = new List<LineDto>(actual);
             for (int i = 0; i < actual; i++)
             {
                 int lineNum = startLine + i;
-                long offset = offsets[i];
                 int byteLen = _index.GetLineByteLength(lineNum);
-
-                // byteLen <= 0 means TotalBytes is not yet set (file not fully indexed).
-                // Skip the line — the client keeps it as undefined and will retry after
-                // TailAsync sets TotalBytes correctly.
                 if (byteLen <= 0) continue;
 
-                var bytes = await _provider.ReadBytesAsync(FilePath, offset, byteLen, ct);
+                // Position within the block
+                int blockOffset = (int)(offsets[i] - firstOffset);
+                if (blockOffset < 0 || blockOffset + byteLen > block.Length) continue;
+
                 // Strip trailing \r\n
-                int end = bytes.Length;
-                while (end > 0 && (bytes[end - 1] == '\n' || bytes[end - 1] == '\r')) end--;
-                results.Add(new LineDto { LineNumber = lineNum, Text = _encoding.GetString(bytes, 0, end) });
+                int end = byteLen;
+                while (end > 0 && blockOffset + end - 1 < block.Length &&
+                       (block[blockOffset + end - 1] == '\n' || block[blockOffset + end - 1] == '\r'))
+                    end--;
+
+                results.Add(new LineDto { LineNumber = lineNum, Text = _encoding.GetString(block, blockOffset, end) });
             }
             return results.ToArray();
         }
@@ -183,11 +198,39 @@ namespace LogWatcher.Web.Sessions
         {
             if (_filter == null) return await ReadLinesAsync(startFilteredLine, count, ct);
             var origLines = _filter.GetOriginalLineRange(startFilteredLine, count);
+            if (origLines.Length == 0) return Array.Empty<LineDto>();
+
+            // Read in contiguous spans to minimise I/O calls.
+            // Group consecutive original line numbers into runs and read each run at once.
+            var allResults = new Dictionary<int, LineDto>(origLines.Length);
+
+            int runStart = 0;
+            while (runStart < origLines.Length)
+            {
+                int runEnd = runStart;
+                // Extend run while lines are close enough (within 50 lines of each other)
+                while (runEnd + 1 < origLines.Length &&
+                       origLines[runEnd + 1] - origLines[runEnd] <= 50)
+                    runEnd++;
+
+                int spanFirst = origLines[runStart];
+                int spanCount = origLines[runEnd] - origLines[runStart] + 1;
+                var chunk = await ReadLinesAsync(spanFirst, spanCount, ct);
+                foreach (var line in chunk)
+                    allResults[line.LineNumber] = line;
+
+                runStart = runEnd + 1;
+            }
+
             var results = new LineDto[origLines.Length];
             for (int i = 0; i < origLines.Length; i++)
             {
-                var lines = await ReadLinesAsync(origLines[i], 1, ct);
-                results[i] = lines.Length > 0 ? lines[0] : new LineDto { LineNumber = origLines[i], Text = "" };
+                results[i] = allResults.TryGetValue(origLines[i], out var dto)
+                    ? dto
+                    : new LineDto { LineNumber = origLines[i], Text = "" };
+                // Remap LineNumber to filtered index so the frontend buffer key
+                // matches the virtual list row index (0, 1, 2...).
+                results[i].LineNumber = startFilteredLine + i;
             }
             return results;
         }
@@ -198,11 +241,23 @@ namespace LogWatcher.Web.Sessions
             int total = _index.Count;
             var progress = _logHub.Clients.Group(SessionId);
 
-            Regex regex = null;
+            Regex patternRegex = null;
             if (options.IsRegex)
             {
                 var ropts = options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                regex = new Regex(options.Pattern, ropts | RegexOptions.Compiled);
+                patternRegex = new Regex(options.Pattern, ropts | RegexOptions.Compiled);
+            }
+
+            // Compile hidden line regex patterns
+            var hiddenPatterns = new List<Regex>();
+            foreach (var hidden in options.HiddenLines ?? new())
+            {
+                if (!hidden.IsActive) continue;
+                if (hidden.IsRegex)
+                {
+                    var ropts = hidden.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                    hiddenPatterns.Add(new Regex(hidden.Text, ropts | RegexOptions.Compiled));
+                }
             }
 
             for (int i = 0; i < total; i += 500)
@@ -211,12 +266,43 @@ namespace LogWatcher.Web.Sessions
                 var lines = await ReadLinesAsync(i, batch, ct);
                 foreach (var line in lines)
                 {
-                    bool match = options.IsRegex
-                        ? regex?.IsMatch(line.Text) == true
+                    // Check if line matches filter pattern
+                    bool matchesPattern = options.IsRegex
+                        ? patternRegex?.IsMatch(line.Text) == true
                         : options.CaseSensitive
                             ? line.Text.Contains(options.Pattern)
                             : line.Text.Contains(options.Pattern, StringComparison.OrdinalIgnoreCase);
-                    if (match) newFilter.Add(line.LineNumber);
+
+                    if (!matchesPattern) continue;
+
+                    // Check if line matches any hidden line pattern
+                    bool isHidden = false;
+                    int hiddenIndex = 0;
+                    foreach (var hidden in options.HiddenLines ?? new())
+                    {
+                        if (!hidden.IsActive)
+                        {
+                            if (hidden.IsRegex) hiddenIndex++;
+                            continue;
+                        }
+
+                        bool hiddenMatch = hidden.IsRegex
+                            ? hiddenPatterns[hiddenIndex]?.IsMatch(line.Text) == true
+                            : hidden.CaseSensitive
+                                ? line.Text.Contains(hidden.Text)
+                                : line.Text.Contains(hidden.Text, StringComparison.OrdinalIgnoreCase);
+
+                        if (hiddenMatch)
+                        {
+                            isHidden = true;
+                            break;
+                        }
+
+                        if (hidden.IsRegex) hiddenIndex++;
+                    }
+
+                    if (!isHidden)
+                        newFilter.Add(line.LineNumber);
                 }
                 if (i % 50000 == 0)
                     await progress.SendAsync("OnFilterProgress", SessionId, i, total, cancellationToken: ct);

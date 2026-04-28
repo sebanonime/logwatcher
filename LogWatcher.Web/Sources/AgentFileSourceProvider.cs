@@ -68,6 +68,12 @@ namespace LogWatcher.Web.Sources
             return Task.FromResult(Array.Empty<byte>());
         }
 
+        public Task<byte[]> ReadRangeBytesAsync(string path, long from, long to, CancellationToken ct)
+        {
+            // Not used for agent sources
+            return Task.FromResult(Array.Empty<byte>());
+        }
+
         public async IAsyncEnumerable<TailChunk> TailAsync(
             string path, long fromByteOffset,
             [EnumeratorCancellation] CancellationToken ct)

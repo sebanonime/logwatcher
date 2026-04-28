@@ -29,6 +29,12 @@ namespace LogWatcher.Web.Sources
         Task<byte[]> ReadBytesAsync(string path, long from, int count, CancellationToken ct);
 
         /// <summary>
+        /// Reads a contiguous byte range in a single I/O call.
+        /// More efficient than multiple ReadBytesAsync calls for bulk line reads.
+        /// </summary>
+        Task<byte[]> ReadRangeBytesAsync(string path, long from, long to, CancellationToken ct);
+
+        /// <summary>
         /// Streams newly appended bytes as they arrive (real-time tail).
         /// Yields a chunk with IsReset=true when the file is truncated or replaced.
         /// </summary>

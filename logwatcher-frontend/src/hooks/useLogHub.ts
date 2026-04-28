@@ -42,9 +42,7 @@ export function useLogHub() {
     })
 
     hub.on('OnIndexProgress', (sessionId: string, bytesIndexed: number, totalBytes: number) => {
-      // Could show a progress bar — for now just update indexed state
-      if (bytesIndexed >= totalBytes && totalBytes > 0)
-        updateTab(sessionId, { isIndexed: true })
+      updateTab(sessionId, { indexedBytes: bytesIndexed, indexTotalBytes: totalBytes })
     })
 
     hub.on('OnFilterProgress', (_sessionId: string, _processed: number, _total: number) => {

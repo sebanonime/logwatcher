@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogWatcher.Web", "LogWatche
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogWatcher.Agent", "LogWatcher.Agent\LogWatcher.Agent.csproj", "{9581166F-3649-471A-B983-676D34D2F596}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LogGenerator", "LogGenerator\LogGenerator.csproj", "{9701A36A-B2ED-4110-80AB-FECCF367AEA4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{9581166F-3649-471A-B983-676D34D2F596}.Release|x86.Build.0 = Release|Any CPU
 		{9581166F-3649-471A-B983-676D34D2F596}.Release|x64.ActiveCfg = Release|Any CPU
 		{9581166F-3649-471A-B983-676D34D2F596}.Release|x64.Build.0 = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|x86.Build.0 = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Debug|x64.Build.0 = Debug|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|x86.ActiveCfg = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|x86.Build.0 = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|x64.ActiveCfg = Release|Any CPU
+		{9701A36A-B2ED-4110-80AB-FECCF367AEA4}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

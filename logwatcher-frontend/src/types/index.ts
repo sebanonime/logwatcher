@@ -15,6 +15,14 @@ export interface FilterOptionsDto {
   pattern: string
   isRegex: boolean
   caseSensitive: boolean
+  hiddenLines?: HiddenLinePattern[]
+}
+
+export interface HiddenLinePattern {
+  text: string
+  isRegex: boolean
+  caseSensitive: boolean
+  isActive: boolean
 }
 
 export interface OpenLogOptionsDto {
@@ -106,6 +114,8 @@ export interface LogTab {
   totalLines: number
   sizeBytes: number
   isIndexed: boolean
+  indexedBytes?: number
+  indexTotalBytes?: number
   newLinesCount: number
   tailMode: boolean
   isFiltered: boolean

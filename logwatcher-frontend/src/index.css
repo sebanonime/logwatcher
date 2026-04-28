@@ -617,6 +617,23 @@ select {
   overflow: hidden;
 }
 
+.index-progress-bar {
+  height: 3px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
+}
+
+.index-progress-bar--indeterminate {
+  width: 40% !important;
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 .log-viewer-body {
   flex: 1;
   min-height: 0;

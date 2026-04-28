@@ -3,13 +3,14 @@ import type { HubConnection } from '@microsoft/signalr'
 import { useLogStore } from '../store/logStore'
 import { useTabStore } from '../store/logStore'
 
-const PREFETCH_AHEAD = 150   // lines to load ahead of viewport
-const PREFETCH_BEHIND = 150  // lines to load behind viewport
+const PREFETCH_AHEAD = 300   // lines to load ahead of viewport
+const PREFETCH_BEHIND = 100  // lines to load behind viewport
+const CHUNK_SIZE = 500        // lines per server request
 
 /**
  * Manages the virtual line buffer for a single log session.
- * - Requests chunks from the server when lines are not in the buffer.
- * - Evicts lines far from the viewport to cap memory.
+ * - Requests ALL missing chunks in the visible+prefetch range on each call.
+ * - Starts from the first missing line so already-loaded chunks are never re-requested.
  */
 export function useVirtualLines(sessionId: string, hub: HubConnection) {
   const { getLine, buffers } = useLogStore()
@@ -25,30 +26,31 @@ export function useVirtualLines(sessionId: string, hub: HubConnection) {
 
     const rangeStart = Math.max(0, startLine - PREFETCH_BEHIND)
     const rangeEnd = Math.min(totalLines - 1, startLine + count + PREFETCH_AHEAD)
-    const rangeCount = rangeEnd - rangeStart + 1
 
-    // Check if any lines in range are missing
     const buf = buffers[sessionId] ?? {}
-    const hasMissing = Array.from({ length: rangeCount }, (_, i) => rangeStart + i)
-      .some(n => buf[n] === undefined)
 
-    if (!hasMissing) return
+    // Walk the range; for each missing line, request its chunk, then skip to end of chunk.
+    // This ensures ALL missing chunks in the range are fetched, not just the first one.
+    for (let lineNum = rangeStart; lineNum <= rangeEnd; lineNum++) {
+      if (buf[lineNum] === undefined) {
+        const chunkStart = Math.floor(lineNum / CHUNK_SIZE) * CHUNK_SIZE
+        if (!inFlight.current.has(chunkStart)) {
+          inFlight.current.add(chunkStart)
+          const chunkEnd = Math.min(totalLines - 1, chunkStart + CHUNK_SIZE - 1)
+          const chunkCount = chunkEnd - chunkStart + 1
 
-    // Deduplicate: one request per 300-line chunk
-    const chunkStart = Math.floor(rangeStart / 300) * 300
-    if (inFlight.current.has(chunkStart)) return
-
-    inFlight.current.add(chunkStart)
-    const chunkEnd = Math.min(totalLines - 1, chunkStart + 299)
-    const chunkCount = chunkEnd - chunkStart + 1
-
-    hub.invoke('RequestLines', sessionId, chunkStart, chunkCount)
-      .then(() => updateTab(sessionId, { errorMessage: undefined }))
-      .catch((e) => {
-        const msg = e instanceof Error ? e.message : 'Failed to request lines from server'
-        updateTab(sessionId, { errorMessage: msg })
-      })
-      .finally(() => inFlight.current.delete(chunkStart))
+          hub.invoke('RequestLines', sessionId, chunkStart, chunkCount)
+            .then(() => updateTab(sessionId, { errorMessage: undefined }))
+            .catch((e) => {
+              const msg = e instanceof Error ? e.message : 'Failed to request lines from server'
+              updateTab(sessionId, { errorMessage: msg })
+            })
+            .finally(() => inFlight.current.delete(chunkStart))
+        }
+        // Skip to end of this chunk to avoid redundant checks within the same chunk
+        lineNum = chunkStart + CHUNK_SIZE - 1
+      }
+    }
   }, [sessionId, totalLines, buffers, hub, updateTab])
 
   const getLineText = useCallback((lineNumber: number): string | undefined => {

@@ -34,6 +34,15 @@ namespace LogWatcher.Web.Dto
         public string Pattern { get; set; }
         public bool IsRegex { get; set; }
         public bool CaseSensitive { get; set; }
+        public List<HiddenLinePattern> HiddenLines { get; set; } = new();
+    }
+
+    public class HiddenLinePattern
+    {
+        public string Text { get; set; }
+        public bool IsRegex { get; set; }
+        public bool CaseSensitive { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     public class OpenLogOptionsDto

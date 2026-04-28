@@ -73,6 +73,27 @@ namespace LogWatcher.Web.Sources
             return buffer;
         }
 
+        public async Task<byte[]> ReadRangeBytesAsync(string path, long from, long to, CancellationToken ct)
+        {
+            long length = to - from;
+            if (length <= 0) return Array.Empty<byte>();
+            // Cap single read at 16 MB to avoid OOM on absurdly large ranges
+            length = Math.Min(length, 16 * 1024 * 1024);
+            using var fs = OpenReadStream(path);
+            fs.Position = from;
+            var buffer = new byte[length];
+            int totalRead = 0;
+            while (totalRead < length)
+            {
+                int read = await fs.ReadAsync(buffer, totalRead, (int)(length - totalRead), ct);
+                if (read == 0) break;
+                totalRead += read;
+            }
+            if (totalRead < length)
+                return buffer[..totalRead];
+            return buffer;
+        }
+
         public async IAsyncEnumerable<TailChunk> TailAsync(
             string path, long fromByteOffset,
             [EnumeratorCancellation] CancellationToken ct)

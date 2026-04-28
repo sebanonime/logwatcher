@@ -89,7 +89,7 @@ namespace LogWatcher.Web.Sessions
         public async Task ServePageAsync(string sessionId, int startLine, int count, string connectionId)
         {
             if (!_sessions.TryGetValue(sessionId, out var session)) return;
-            var lines = await session.ReadLinesAsync(startLine, count);
+            var lines = await session.ReadFilteredLinesAsync(startLine, count);
             await _logHub.Clients.Client(connectionId)
                 .SendAsync("OnLines", sessionId, lines);
         }

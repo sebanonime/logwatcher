@@ -67,7 +67,6 @@ export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaPro
               onClick={() => setActive(tab.sessionId)}
               className={`tab-pill ${isActive ? 'tab-pill--active' : ''}`}
             >
-              <span className="tab-pill__meta">{tab.serverName}</span>
               <span className="tab-pill__title" title={tab.displayName}>
                 {tab.displayName}
               </span>

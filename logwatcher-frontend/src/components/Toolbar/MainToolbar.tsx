@@ -22,8 +22,8 @@ interface MainToolbarProps {
  */
 export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
   const { tabs, activeSessionId, updateTab, setActive } = useTabStore()
-  const { setSelectedLine, getLine } = useLogStore()
-  const { perimeters, selectedPerimeterId } = usePerimeterStore()
+  const { setSelectedLine, getLine, clearBuffer } = useLogStore()
+  const { perimeters, selectedPerimeterId, selectPerimeter } = usePerimeterStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const { addEntry } = useFilterHistory()
 
@@ -42,6 +42,11 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
   const [isFiltering, setIsFiltering] = useState(false)
 
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
+
+  const handlePerimeterChange = useCallback((newPerimeterId: string) => {
+    selectPerimeter(newPerimeterId)
+    localStorage.setItem('logwatcher_last_perimeter', newPerimeterId)
+  }, [selectPerimeter])
 
   // Reset filter state when active tab changes
   useEffect(() => {
@@ -66,7 +71,10 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
   const applyFilter = useCallback(async () => {
     if (!activeSessionId) return
     if (!pattern.trim()) {
+      clearBuffer(activeSessionId)
+      updateTab(activeSessionId, { totalLines: 0 })
       await hub.invoke('ClearFilter', activeSessionId)
+      clearBuffer(activeSessionId)
       updateTab(activeSessionId, { isFiltered: false })
       return
     }
@@ -85,19 +93,37 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
 
     setIsFiltering(true)
     addEntry(filterPayload.pattern.trim())
-    const filter: FilterOptionsDto = filterPayload
+    const filter: FilterOptionsDto = {
+      ...filterPayload,
+      hiddenLines: (activeProfile?.dicoHiddenLog ?? []).map(h => ({
+        text: h.text,
+        isRegex: h.isRegex,
+        caseSensitive: h.caseSensitive,
+        isActive: h.isActif,
+      })),
+    }
+
+    // Freeze viewport while backend builds filtered index to avoid stale requests.
+    clearBuffer(activeSessionId)
+    updateTab(activeSessionId, { totalLines: 0 })
     await hub.invoke('SetFilter', activeSessionId, filter)
+    // Drop any late OnLines responses from pre-filter requests.
+    clearBuffer(activeSessionId)
+
     updateTab(activeSessionId, { isFiltered: true })
     setIsFiltering(false)
     onFilterApplied?.()
-  }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter])
+  }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer])
 
   const clearFilter = useCallback(async () => {
     if (!activeSessionId) return
     setPattern('')
+    clearBuffer(activeSessionId)
+    updateTab(activeSessionId, { totalLines: 0 })
     await hub.invoke('ClearFilter', activeSessionId)
+    clearBuffer(activeSessionId)
     updateTab(activeSessionId, { isFiltered: false })
-  }, [hub, activeSessionId, updateTab])
+  }, [hub, activeSessionId, updateTab, clearBuffer])
 
   const toggleTail = useCallback(async () => {
     if (!activeSessionId) return
@@ -178,9 +204,17 @@ export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogou
       </div>
 
       <div className="chrome-controls">
-        <button onClick={onSwitchPerimeter} title="Switch perimeter" className="control-button control-button--ghost">
-          <span className="control-value">{selectedPerimeter?.name ?? 'Perimeter'}</span>
-        </button>
+        <select
+          className="control-input"
+          value={selectedPerimeterId ?? ''}
+          onChange={e => handlePerimeterChange(e.target.value)}
+          title="Select perimeter"
+        >
+          <option value="">Select perimeter</option>
+          {perimeters.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
 
         <div className="toolbar-filter-cluster">
           <input
