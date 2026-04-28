@@ -18,6 +18,20 @@
       <CaseSensitive>false</CaseSensitive>
       <IsRegex>false</IsRegex>
     </Highlighting>
+    <Highlighting>
+      <Order>1</Order>
+      <Text>test</Text>
+      <ForeColorArgb>-1</ForeColorArgb>
+      <BackColorArgb>0</BackColorArgb>
+      <DarkForeColorArgb>-8781824</DarkForeColorArgb>
+      <DarkBackColorArgb>-13736448</DarkBackColorArgb>
+      <LightForeColorArgb>-16777216</LightForeColorArgb>
+      <LightBackColorArgb>0</LightBackColorArgb>
+      <Bold>true</Bold>
+      <HightPriority>false</HightPriority>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </Highlighting>
   </DicoHighLighting>
   <DicoHiddenLog>
     <HiddenLine>

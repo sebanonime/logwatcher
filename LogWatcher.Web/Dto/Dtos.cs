@@ -27,6 +27,9 @@ namespace LogWatcher.Web.Dto
         
         [JsonPropertyName("filePath")]
         public string FilePath { get; set; }
+
+        [JsonPropertyName("viewVersion")]
+        public int ViewVersion { get; set; }
     }
 
     public class FilterOptionsDto

@@ -91,7 +91,7 @@ namespace LogWatcher.Web.Sessions
             if (!_sessions.TryGetValue(sessionId, out var session)) return;
             var lines = await session.ReadFilteredLinesAsync(startLine, count);
             await _logHub.Clients.Client(connectionId)
-                .SendAsync("OnLines", sessionId, lines);
+                .SendAsync("OnLines", sessionId, startLine, lines, session.ViewVersion);
         }
 
         public async Task ApplyFilterAsync(string sessionId, FilterOptionsDto filter)

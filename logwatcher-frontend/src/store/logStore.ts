@@ -10,6 +10,7 @@ interface LogState {
   buffers: Record<string, LineBuffer>
   selectedLines: Record<string, LineDto | null>
   addLines: (sessionId: string, lines: LineDto[]) => void
+  addLinesAt: (sessionId: string, startLine: number, lines: LineDto[]) => void
   clearBuffer: (sessionId: string) => void
   getLine: (sessionId: string, lineNumber: number) => string | undefined
   setSelectedLine: (sessionId: string, line: LineDto | null) => void
@@ -31,6 +32,21 @@ const EVICT_TO = 3000
 export const useLogStore = create<LogState>((set, get) => ({
   buffers: {},
   selectedLines: {},
+
+  addLinesAt: (sessionId, startLine, lines) => {
+    set(state => {
+      const buf = { ...(state.buffers[sessionId] ?? {}) }
+      for (let i = 0; i < lines.length; i++) {
+        buf[startLine + i] = lines[i].text
+      }
+      const keys = Object.keys(buf).map(Number).sort((a, b) => a - b)
+      if (keys.length > BUFFER_MAX) {
+        const toEvict = keys.slice(0, keys.length - EVICT_TO)
+        for (const k of toEvict) delete buf[k]
+      }
+      return { buffers: { ...state.buffers, [sessionId]: buf } }
+    })
+  },
 
   addLines: (sessionId, lines) => {
     set(state => {

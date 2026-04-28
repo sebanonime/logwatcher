@@ -9,6 +9,7 @@ export interface FileStatsDto {
   isIndexed: boolean
   serverId: string
   filePath: string
+  viewVersion: number
 }
 
 export interface FilterOptionsDto {
@@ -119,6 +120,7 @@ export interface LogTab {
   newLinesCount: number
   tailMode: boolean
   isFiltered: boolean
+  viewVersion?: number
   activeProfileName?: string
   activeStoredFilterName?: string
   errorMessage?: string

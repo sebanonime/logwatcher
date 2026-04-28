@@ -9,7 +9,7 @@ import type { LineDto, FileStatsDto } from '../types'
  */
 export function useLogHub() {
   const started = useRef(false)
-  const { addLines, clearBuffer } = useLogStore()
+  const { addLines, addLinesAt, clearBuffer } = useLogStore()
   const { updateTab } = useTabStore()
 
   useEffect(() => {
@@ -23,16 +23,29 @@ export function useLogHub() {
       updateTab(sessionId, { totalLines, errorMessage: undefined })
     })
 
-    hub.on('OnLines', (sessionId: string, lines: LineDto[]) => {
-      addLines(sessionId, lines)
-      updateTab(sessionId, { errorMessage: undefined })
+    hub.on('OnLines', (sessionId: string, startLine: number, lines: LineDto[], viewVersion?: number) => {
+      const tab = useTabStore.getState().tabs.find(t => t.sessionId === sessionId)
+      if (typeof viewVersion === 'number' && typeof tab?.viewVersion === 'number' && viewVersion !== tab.viewVersion)
+        return
+
+      addLinesAt(sessionId, startLine, lines)
+      if (typeof viewVersion === 'number') {
+        updateTab(sessionId, { errorMessage: undefined, viewVersion })
+      } else {
+        updateTab(sessionId, { errorMessage: undefined })
+      }
     })
 
     hub.on('OnFileStats', (sessionId: string, stats: FileStatsDto) => {
+      const tab = useTabStore.getState().tabs.find(t => t.sessionId === sessionId)
+      if (typeof tab?.viewVersion === 'number' && tab.viewVersion !== stats.viewVersion)
+        clearBuffer(sessionId)
+
       updateTab(sessionId, {
         totalLines: stats.totalLines,
         sizeBytes: stats.sizeBytes,
         isIndexed: stats.isIndexed,
+        viewVersion: stats.viewVersion,
       })
     })
 
@@ -59,7 +72,7 @@ export function useLogHub() {
     return () => {
       // Don't stop the hub on cleanup — it's a singleton for the app lifetime
     }
-  }, [addLines, clearBuffer, updateTab])
+  }, [addLines, addLinesAt, clearBuffer, updateTab])
 
   return getLogHub()
 }
