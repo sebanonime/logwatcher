@@ -236,7 +236,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
         <div className="toolbar-filter-cluster">
           {activeTab && (
             <select
-              className="control-input"
+              className="control-input toolbar-profile-select"
               value={activeTab.activeProfileName ?? ''}
               onChange={async event => {
                 if (!activeSessionId) return
@@ -268,7 +268,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
 
           {activeProfile && (
             <select
-              className="control-input"
+              className="control-input toolbar-stored-select"
               value={activeTab?.activeStoredFilterName ?? ''}
               onChange={async event => {
                 if (!activeSessionId) return

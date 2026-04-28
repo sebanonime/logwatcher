@@ -106,8 +106,8 @@ select {
 .chrome-bar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 7px 10px;
   border-radius: 8px;
 }
 
@@ -143,7 +143,7 @@ select {
 .chrome-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   align-items: stretch;
   justify-content: flex-end;
 }
@@ -152,18 +152,26 @@ select {
 .toolbar-status-cluster {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   align-items: center;
 }
 
 .toolbar-filter-cluster {
   flex: 1;
-  min-width: min(280px, 100%);
+  min-width: min(340px, 100%);
+}
+
+.toolbar-profile-select {
+  width: clamp(140px, 15vw, 190px);
+}
+
+.toolbar-stored-select {
+  width: clamp(140px, 16vw, 220px);
 }
 
 .toolbar-filter-input {
   flex: 1;
-  min-width: 160px;
+  min-width: 220px;
 }
 
 .control-input,
@@ -179,7 +187,7 @@ select {
 
 .control-input {
   padding: 4px 8px;
-  min-height: 28px;
+  min-height: 30px;
   outline: none;
 }
 
@@ -194,8 +202,8 @@ select {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 28px;
-  min-width: 28px;
+  min-height: 30px;
+  min-width: 30px;
   padding: 4px 8px;
   cursor: pointer;
 }
@@ -245,12 +253,12 @@ select {
   align-items: center;
   gap: 4px;
   border-radius: 999px;
-  padding: 2px 6px;
+  padding: 4px 8px;
   background: var(--surface-3);
   border: 1px solid var(--border-subtle);
   color: var(--text-2);
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .status-pill--warn {
@@ -378,7 +386,7 @@ select {
 
 .browser-columns {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 188px minmax(0, 1fr);
   gap: 4px;
   min-height: 0;
   height: 100%;
@@ -396,7 +404,7 @@ select {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--surface-3);
-  padding: 4px;
+  padding: 5px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -487,8 +495,8 @@ select {
 }
 
 .browser-item-title {
-  line-height: 1.1;
-  font-size: 10px;
+  line-height: 1.15;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -503,6 +511,30 @@ select {
 
 .browser-item--active {
   background: rgba(124, 183, 255, 0.2);
+}
+
+.browser-list--uniform .browser-item--block {
+  min-height: 24px;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+}
+
+.browser-list--uniform .browser-item-title {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.browser-file-list--uniform .browser-file-row--uniform {
+  min-height: 24px;
+  padding: 2px 6px;
+  display: flex;
+  align-items: center;
+}
+
+.browser-file-list--uniform .browser-item-title {
+  font-size: 11px;
+  line-height: 1;
 }
 
 .browser-item-icon,
@@ -1034,11 +1066,13 @@ select {
 .settings-list-panel,
 .settings-detail-panel,
 .highlight-editor-list {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 4px;
   min-height: 0;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .settings-list-item {
@@ -1074,7 +1108,7 @@ select {
   display: flex;
   width: 100%;
   text-align: left;
-  padding: 6px;
+  padding: 5px 6px;
   cursor: pointer;
 }
 
@@ -1087,7 +1121,7 @@ select {
   border: 1px solid var(--border-subtle);
   background: var(--surface-3);
   border-radius: 6px;
-  padding: 6px;
+  padding: 7px;
 }
 
 .highlight-editor-controls {
@@ -1107,9 +1141,9 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 4px;
-  min-height: 26px;
+  min-height: 24px;
 }
 
 .highlight-preview-swatch--dark {
@@ -1124,23 +1158,23 @@ select {
 
 .highlight-preview-label {
   color: #888;
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   white-space: nowrap;
   flex-shrink: 0;
-  min-width: 46px;
+  min-width: 40px;
 }
 
 .highlight-preview-text {
   font-family: 'Cascadia Code', Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   padding: 1px 5px;
   border-radius: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 340px;
+  max-width: 100%;
 }
 
 .settings-row-line {

@@ -138,24 +138,26 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                 <div className="browser-stack-list">
                   <div className="browser-stack-block">
                     <div className="section-label">Perimeter</div>
-                    <div className="browser-filter-row">
-                      <select
-                        className="control-input browser-perimeter-select"
-                        value={selectedPerimeterId ?? ''}
-                        onChange={event => handlePerimeterChange(event.target.value)}
-                        title="Select perimeter"
-                      >
-                        <option value="">Select perimeter</option>
-                        {perimeters.map(perimeter => (
-                          <option key={perimeter.id} value={perimeter.id}>{perimeter.name}</option>
-                        ))}
-                      </select>
+                    <div className="browser-list browser-list--uniform">
+                      {perimeters.length === 0 && (
+                        <div className="empty-state compact-empty-state browser-empty-state">No perimeter available.</div>
+                      )}
+                      {perimeters.map(perimeter => (
+                        <button
+                          key={perimeter.id}
+                          onClick={() => handlePerimeterChange(perimeter.id)}
+                          className={`browser-item browser-item--block ${selectedPerimeterId === perimeter.id ? 'browser-item--active' : ''}`}
+                          title={perimeter.name}
+                        >
+                          <span className="browser-item-title">{perimeter.name}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
                   <div className="browser-stack-block browser-stack-block--fill">
                     <div className="section-label">Environment</div>
-                    <div className="browser-list">
+                    <div className="browser-list browser-list--uniform">
                       {selectedPerimeter?.rootFolders.map(root => (
                         <button
                           key={root.name}
@@ -181,7 +183,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                     onChange={e => setSubfoldersFilter(e.target.value)}
                   />
                 </div>
-                <div className="browser-list">
+                <div className="browser-list browser-list--uniform">
                   {isLoadingSubfolders && (
                     <div className="empty-state compact-empty-state browser-empty-state">Loading folders…</div>
                   )}
@@ -219,7 +221,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                   onChange={e => setFilesFilter(e.target.value)}
                 />
               </div>
-              <div className="browser-file-list">
+              <div className="browser-file-list browser-file-list--uniform">
                 {isLoadingFiles && (
                   <div className="empty-state compact-empty-state browser-empty-state">Loading files…</div>
                 )}
@@ -229,7 +231,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                     <button
                       key={f.path}
                       onDoubleClick={() => handleOpenFile(f)}
-                      className="browser-file-row"
+                      className="browser-file-row browser-file-row--uniform"
                       title={`Double-click to open:\n${f.path}`}
                     >
                       <span className="browser-item-title">{name}</span>
