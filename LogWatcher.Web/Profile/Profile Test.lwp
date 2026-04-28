@@ -9,8 +9,8 @@
       <Text>DEBUG</Text>
       <ForeColorArgb>-1</ForeColorArgb>
       <BackColorArgb>0</BackColorArgb>
-      <DarkForeColorArgb>-14079703</DarkForeColorArgb>
-      <DarkBackColorArgb>-11035660</DarkBackColorArgb>
+      <DarkForeColorArgb>-10117381</DarkForeColorArgb>
+      <DarkBackColorArgb>0</DarkBackColorArgb>
       <LightForeColorArgb>-16777216</LightForeColorArgb>
       <LightBackColorArgb>0</LightBackColorArgb>
       <Bold>false</Bold>
@@ -19,6 +19,20 @@
       <IsRegex>false</IsRegex>
     </Highlighting>
   </DicoHighLighting>
-  <DicoHiddenLog />
-  <DicoStoredFilter />
+  <DicoHiddenLog>
+    <HiddenLine>
+      <IsActif>true</IsActif>
+      <Text>Line </Text>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </HiddenLine>
+  </DicoHiddenLog>
+  <DicoStoredFilter>
+    <StoredFilter>
+      <Name>All Info</Name>
+      <Filter>INFO</Filter>
+      <IsRegex>false</IsRegex>
+      <CaseSensitive>false</CaseSensitive>
+    </StoredFilter>
+  </DicoStoredFilter>
 </Profile>

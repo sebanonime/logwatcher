@@ -12,7 +12,6 @@ export function SelectedLinePanel() {
       <div className="section-header-row">
         <div>
           <div className="eyebrow">Inspect</div>
-          <div className="section-title">Selected line{line ? ` #${line.lineNumber + 1}` : ''}</div>
         </div>
       </div>
       <div className="rail-scroll">

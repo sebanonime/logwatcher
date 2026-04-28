@@ -31,7 +31,7 @@ export function TabBar({ onClose }: TabBarProps) {
           </span>
 
           {/* File name */}
-          <span className="max-w-[180px] truncate" title={tab.filePath}>
+          <span className="max-w-[180px] truncate" title={tab.displayName}>
             {tab.displayName}
           </span>
 

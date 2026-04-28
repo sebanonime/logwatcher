@@ -68,32 +68,12 @@ export function MainLayout({ hub, onSwitchPerimeter, onOpenPreferences, onOpenLo
           )}
 
           {isBrowserVisible && (
-            <Separator className="workspace-separator workspace-separator--vertical">
-              <button
-                onClick={toggleBrowserPanel}
-                className="separator-toggle separator-toggle--left"
-                title="Hide explorer"
-                aria-label="Hide explorer"
-              >
-                <span aria-hidden>◂</span>
-              </button>
-            </Separator>
+            <Separator className="workspace-separator workspace-separator--vertical" />
           )}
 
           <Panel defaultSize={isBrowserVisible || isInspectorVisible ? 52 : 100} minSize={20}>
             <div className="workspace-panel workspace-panel--viewer">
               <div className="viewer-canvas">
-                {!isBrowserVisible && (
-                  <button
-                    onClick={toggleBrowserPanel}
-                    className="edge-toggle edge-toggle--left"
-                    title="Show explorer"
-                    aria-label="Show explorer"
-                  >
-                    <span aria-hidden>▸</span>
-                  </button>
-                )}
-
                 {!isInspectorVisible && (
                   <button
                     onClick={toggleInspectorPanel}
@@ -106,7 +86,11 @@ export function MainLayout({ hub, onSwitchPerimeter, onOpenPreferences, onOpenLo
                 )}
 
                 <div style={{ height: '100%', minHeight: 0 }}>
-                  <DockArea hub={hub} />
+                  <DockArea
+                    hub={hub}
+                    isBrowserVisible={isBrowserVisible}
+                    onToggleBrowser={toggleBrowserPanel}
+                  />
                 </div>
               </div>
             </div>

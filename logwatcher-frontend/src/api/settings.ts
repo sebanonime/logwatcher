@@ -107,6 +107,13 @@ export function getPreferences() {
   return authFetch<PreferencesPayloadDto>('/api/settings/preferences')
 }
 
+export function savePreferences(payload: PreferencesPayloadDto) {
+  return authFetch<PreferencesPayloadDto>('/api/settings/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function saveDefaultHighlights(defaultHighlights: HighlightingRule[]) {
   return authFetch<void>('/api/settings/preferences/default-highlights', {
     method: 'PUT',

@@ -576,6 +576,13 @@ select {
   z-index: 2;
 }
 
+.tab-strip__toggle {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
 .dock-area {
   display: flex;
   flex-direction: column;
@@ -641,6 +648,12 @@ select {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
+}
+
+.tab-pill__profile {
+  max-width: 120px;
+  min-height: 20px;
+  padding: 1px 4px;
 }
 
 .tab-pill__close {
@@ -885,6 +898,23 @@ select {
   gap: 8px;
 }
 
+.profile-tabs {
+  position: relative;
+  justify-content: flex-start;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.profile-tabs::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  pointer-events: none;
+}
+
 .settings-screen__header h2,
 .settings-card__header h3 {
   margin: 0;
@@ -1046,6 +1076,21 @@ select {
   max-width: 340px;
 }
 
+.settings-row-line {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(3, auto) auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-3);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.settings-row-line--stacked {
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 2fr) auto auto;
+}
+
 .highlight-color-pair input[type='color'] {
   width: 28px;
   height: 22px;
@@ -1086,6 +1131,11 @@ select {
 
   .highlight-preview {
     flex-direction: column;
+  }
+
+  .settings-row-line,
+  .settings-row-line--stacked {
+    grid-template-columns: 1fr;
   }
 
   .viewer-header {

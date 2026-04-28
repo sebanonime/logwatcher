@@ -21,8 +21,7 @@ export function FilterHistoryPanel({ onSelectPattern, refreshTick }: FilterHisto
     <div className="rail-panel-content">
       <div className="section-header-row">
         <div>
-          <div className="eyebrow">History</div>
-          <div className="section-title">Filter history</div>
+          <div className="eyebrow">Filter history</div>
         </div>
         {history.length > 0 && (
           <button

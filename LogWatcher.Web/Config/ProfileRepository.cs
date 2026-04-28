@@ -81,6 +81,33 @@ namespace LogWatcher.Web.Config
             }
         }
 
+        public void ReplaceAll(IEnumerable<Profile> profiles)
+        {
+            ArgumentNullException.ThrowIfNull(profiles);
+
+            lock (_lock)
+            {
+                var normalized = profiles
+                    .Where(p => p != null && !string.IsNullOrWhiteSpace(p.Name))
+                    .GroupBy(p => p.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.Last())
+                    .ToList();
+
+                var desiredNames = new HashSet<string>(normalized.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
+                foreach (var path in Directory.GetFiles(_folderPath, "*.lwp"))
+                {
+                    var existingName = Path.GetFileNameWithoutExtension(path);
+                    if (!desiredNames.Contains(existingName))
+                        File.Delete(path);
+                }
+
+                foreach (var profile in normalized)
+                {
+                    Upsert(profile);
+                }
+            }
+        }
+
         private Profile ReadProfile(string path)
         {
             try

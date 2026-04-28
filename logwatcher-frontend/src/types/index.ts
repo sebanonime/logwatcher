@@ -109,6 +109,8 @@ export interface LogTab {
   newLinesCount: number
   tailMode: boolean
   isFiltered: boolean
+  activeProfileName?: string
+  activeStoredFilterName?: string
   errorMessage?: string
 }
 

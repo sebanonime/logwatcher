@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import {
-  deleteProfile,
-  getPreferences,
-  saveDefaultHighlights,
-  updateProfile,
-} from '../../api/settings'
+import { getPreferences, savePreferences } from '../../api/settings'
 import { usePreferencesStore } from '../../store/preferencesStore'
 import { useUiStore } from '../../store/uiStore'
-import type { HighlightingRule, PreferencesPayloadDto, ProfileDto, UserFontFamily } from '../../types'
+import type {
+  HiddenLineDto,
+  HighlightingRule,
+  PreferencesPayloadDto,
+  ProfileDto,
+  StoredFilterDto,
+  UserFontFamily,
+} from '../../types'
 
 interface PreferencesScreenProps {
   onClose: () => void
@@ -29,6 +31,24 @@ function emptyHighlight(order: number): HighlightingRule {
     hightPriority: false,
     caseSensitive: false,
     isRegex: false,
+  }
+}
+
+function emptyHiddenLine(): HiddenLineDto {
+  return {
+    isActif: true,
+    text: '',
+    caseSensitive: false,
+    isRegex: false,
+  }
+}
+
+function emptyStoredFilter(order: number): StoredFilterDto {
+  return {
+    name: `Filter ${order + 1}`,
+    filter: '',
+    isRegex: true,
+    caseSensitive: false,
   }
 }
 
@@ -56,8 +76,7 @@ function hexToArgb(hex: string): number {
 }
 
 function argbToCss(argb: number | undefined, fallback: string): string {
-  if (argb === undefined || argb === -1) return fallback
-  if (argb === 0) return 'transparent'
+  if (argb === undefined || argb === -1 || argb === 0) return fallback
   const r = (argb >> 16) & 0xFF
   const g = (argb >> 8) & 0xFF
   const b = argb & 0xFF
@@ -93,51 +112,75 @@ function HighlightListEditor({
       </div>
       <div className="highlight-editor-list">
         {rules.length === 0 && <div className="empty-state compact-empty-state">No highlights configured.</div>}
-        {rules.map((rule, index) => (
-          <div key={`${title}-${index}`} className="highlight-editor-row">
-            <div className="highlight-editor-controls">
-            <input
-              className="control-input"
-              value={rule.text}
-              placeholder="Pattern"
-              onChange={event => updateRule(index, { text: event.target.value })}
-            />
-            <label className="settings-inline-check"><input type="checkbox" checked={rule.isRegex} onChange={event => updateRule(index, { isRegex: event.target.checked })} />Regex</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={rule.caseSensitive} onChange={event => updateRule(index, { caseSensitive: event.target.checked })} />Case</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={rule.bold} onChange={event => updateRule(index, { bold: event.target.checked })} />Bold</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={rule.hightPriority} onChange={event => updateRule(index, { hightPriority: event.target.checked })} />Priority</label>
-            <div className="highlight-color-pair">
-              <span>Dark</span>
-              <input type="color" value={argbToHex(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff')} onChange={event => updateRule(index, { darkForeColorArgb: hexToArgb(event.target.value) })} />
-              <input type="color" value={argbToHex(rule.darkBackColorArgb ?? rule.backColorArgb, '#000000')} onChange={event => updateRule(index, { darkBackColorArgb: hexToArgb(event.target.value) })} />
-            </div>
-            <div className="highlight-color-pair">
-              <span>Light</span>
-              <input type="color" value={argbToHex(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000')} onChange={event => updateRule(index, { lightForeColorArgb: hexToArgb(event.target.value) })} />
-              <input type="color" value={argbToHex(rule.lightBackColorArgb ?? rule.backColorArgb, '#ffffff')} onChange={event => updateRule(index, { lightBackColorArgb: hexToArgb(event.target.value) })} />
-            </div>
-            <button className="control-button control-button--ghost" onClick={() => removeRule(index)}>Delete</button>
-            </div>
-            <div className="highlight-preview">
-              <div className="highlight-preview-swatch highlight-preview-swatch--dark">
-                <span className="highlight-preview-label">◑ Dark</span>
-                <span className="highlight-preview-text" style={{
-                  color: argbToCss(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff'),
-                  backgroundColor: argbToCss(rule.darkBackColorArgb ?? rule.backColorArgb, 'transparent'),
-                  fontWeight: rule.bold ? 'bold' : undefined,
-                }}>{rule.text || 'Sample text'}</span>
+        {rules.map((rule, index) => {
+          const darkBgAuto = !rule.darkBackColorArgb
+          const lightBgAuto = !rule.lightBackColorArgb
+          return (
+            <div key={`${title}-${index}`} className="highlight-editor-row">
+              <div className="highlight-editor-controls">
+                <input
+                  className="control-input"
+                  value={rule.text}
+                  placeholder="Pattern"
+                  onChange={event => updateRule(index, { text: event.target.value })}
+                />
+                <label className="settings-inline-check"><input type="checkbox" checked={rule.isRegex} onChange={event => updateRule(index, { isRegex: event.target.checked })} />Regex</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={rule.caseSensitive} onChange={event => updateRule(index, { caseSensitive: event.target.checked })} />Case</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={rule.bold} onChange={event => updateRule(index, { bold: event.target.checked })} />Bold</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={rule.hightPriority} onChange={event => updateRule(index, { hightPriority: event.target.checked })} />Priority</label>
+                <div className="highlight-color-pair">
+                  <span>Dark</span>
+                  <input
+                    type="color"
+                    value={argbToHex(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff')}
+                    onChange={event => updateRule(index, { darkForeColorArgb: hexToArgb(event.target.value) })}
+                  />
+                  <input
+                    type="color"
+                    value={argbToHex(rule.darkBackColorArgb, '#1b2533')}
+                    disabled={darkBgAuto}
+                    onChange={event => updateRule(index, { darkBackColorArgb: hexToArgb(event.target.value) })}
+                  />
+                  <label className="settings-inline-check"><input type="checkbox" checked={darkBgAuto} onChange={event => updateRule(index, { darkBackColorArgb: event.target.checked ? 0 : hexToArgb('#1b2533') })} />Auto BG</label>
+                </div>
+                <div className="highlight-color-pair">
+                  <span>Light</span>
+                  <input
+                    type="color"
+                    value={argbToHex(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000')}
+                    onChange={event => updateRule(index, { lightForeColorArgb: hexToArgb(event.target.value) })}
+                  />
+                  <input
+                    type="color"
+                    value={argbToHex(rule.lightBackColorArgb, '#ffffff')}
+                    disabled={lightBgAuto}
+                    onChange={event => updateRule(index, { lightBackColorArgb: hexToArgb(event.target.value) })}
+                  />
+                  <label className="settings-inline-check"><input type="checkbox" checked={lightBgAuto} onChange={event => updateRule(index, { lightBackColorArgb: event.target.checked ? 0 : hexToArgb('#ffffff') })} />Auto BG</label>
+                </div>
+                <button className="control-button control-button--ghost" onClick={() => removeRule(index)}>Delete</button>
               </div>
-              <div className="highlight-preview-swatch highlight-preview-swatch--light">
-                <span className="highlight-preview-label">◐ Light</span>
-                <span className="highlight-preview-text" style={{
-                  color: argbToCss(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000'),
-                  backgroundColor: argbToCss(rule.lightBackColorArgb ?? rule.backColorArgb, 'transparent'),
-                  fontWeight: rule.bold ? 'bold' : undefined,
-                }}>{rule.text || 'Sample text'}</span>
+              <div className="highlight-preview">
+                <div className="highlight-preview-swatch highlight-preview-swatch--dark">
+                  <span className="highlight-preview-label">◑ Dark</span>
+                  <span className="highlight-preview-text" style={{
+                    color: argbToCss(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff'),
+                    backgroundColor: argbToCss(rule.darkBackColorArgb, '#1b2533'),
+                    fontWeight: rule.bold ? 'bold' : undefined,
+                  }}>{rule.text || 'Sample text'}</span>
+                </div>
+                <div className="highlight-preview-swatch highlight-preview-swatch--light">
+                  <span className="highlight-preview-label">◐ Light</span>
+                  <span className="highlight-preview-text" style={{
+                    color: argbToCss(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000'),
+                    backgroundColor: argbToCss(rule.lightBackColorArgb, '#ffffff'),
+                    fontWeight: rule.bold ? 'bold' : undefined,
+                  }}>{rule.text || 'Sample text'}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
@@ -150,8 +193,12 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
   const [error, setError] = useState<string | null>(null)
   const [defaultsDraft, setDefaultsDraft] = useState<HighlightingRule[]>([])
   const [profilesDraft, setProfilesDraft] = useState<ProfileDto[]>([])
+  const [themeDraft, setThemeDraft] = useState<'dark' | 'light'>(theme)
+  const [fontFamilyDraft, setFontFamilyDraft] = useState<UserFontFamily>(fontFamily)
+  const [fontSizeDraft, setFontSizeDraft] = useState<number>(fontSize)
   const [selectedProfileIndex, setSelectedProfileIndex] = useState<number | null>(null)
-  const [selectedProfileOriginalName, setSelectedProfileOriginalName] = useState<string | null>(null)
+  const [selectedStoredFilterIndex, setSelectedStoredFilterIndex] = useState<number | null>(null)
+  const [activeProfileTab, setActiveProfileTab] = useState<'highlight' | 'hidden' | 'stored'>('highlight')
 
   useEffect(() => {
     getPreferences()
@@ -159,11 +206,14 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
         setPreferences(payload)
         setDefaultsDraft(payload.defaultHighlights ?? [])
         setProfilesDraft(payload.profiles ?? [])
+        setThemeDraft(theme)
+        setFontFamilyDraft(fontFamily)
+        setFontSizeDraft(fontSize)
         setSelectedProfileIndex(payload.profiles.length > 0 ? 0 : null)
-        setSelectedProfileOriginalName(payload.profiles[0]?.name ?? null)
+        setSelectedStoredFilterIndex(payload.profiles[0]?.dicoStoredFilter?.length ? 0 : null)
       })
       .catch((fetchError) => setError(fetchError instanceof Error ? fetchError.message : 'Failed to load preferences.'))
-  }, [setPreferences])
+  }, [setPreferences, theme, fontFamily, fontSize])
 
   useEffect(() => {
     setDefaultsDraft(defaultHighlights)
@@ -173,14 +223,28 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
     setProfilesDraft(profiles)
     if (profiles.length > 0 && selectedProfileIndex === null) {
       setSelectedProfileIndex(0)
-      setSelectedProfileOriginalName(profiles[0].name)
     }
   }, [profiles, selectedProfileIndex])
+
+  useEffect(() => {
+    if (selectedProfileIndex === null) {
+      setSelectedStoredFilterIndex(null)
+      return
+    }
+
+    const storedFilters = profilesDraft[selectedProfileIndex]?.dicoStoredFilter ?? []
+    setSelectedStoredFilterIndex(storedFilters.length > 0 ? 0 : null)
+  }, [selectedProfileIndex, profilesDraft])
 
   const selectedProfile = useMemo(
     () => selectedProfileIndex === null ? null : (profilesDraft[selectedProfileIndex] ?? null),
     [profilesDraft, selectedProfileIndex]
   )
+
+  const selectedStoredFilter = useMemo(() => {
+    if (!selectedProfile || selectedStoredFilterIndex === null) return null
+    return selectedProfile.dicoStoredFilter?.[selectedStoredFilterIndex] ?? null
+  }, [selectedProfile, selectedStoredFilterIndex])
 
   const updateSelectedProfile = (patch: Partial<ProfileDto>) => {
     if (selectedProfileIndex === null || !selectedProfile) return
@@ -189,53 +253,88 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
     ))
   }
 
+  const updateSelectedStoredFilter = (patch: Partial<StoredFilterDto>) => {
+    if (!selectedProfile || selectedStoredFilterIndex === null) return
+    const current = selectedProfile.dicoStoredFilter ?? []
+    updateSelectedProfile({
+      dicoStoredFilter: current.map((item, index) =>
+        index === selectedStoredFilterIndex ? { ...item, ...patch } : item
+      ),
+    })
+  }
+
   const createProfile = () => {
     const baseName = `Profile ${profilesDraft.length + 1}`
     const profile = emptyProfile(baseName)
     setProfilesDraft([...profilesDraft, profile])
     setSelectedProfileIndex(profilesDraft.length)
-    setSelectedProfileOriginalName(profile.name)
+    setSelectedStoredFilterIndex(null)
   }
 
-  const removeSelectedProfile = async () => {
+  const removeSelectedProfile = () => {
+    if (selectedProfileIndex === null) return
+    const nextProfiles = profilesDraft.filter((_, index) => index !== selectedProfileIndex)
+    setProfilesDraft(nextProfiles)
+    setSelectedProfileIndex(nextProfiles.length > 0 ? 0 : null)
+    setSelectedStoredFilterIndex(nextProfiles[0]?.dicoStoredFilter?.length ? 0 : null)
+  }
+
+  const addHiddenLine = () => {
     if (!selectedProfile) return
-    setIsSaving(true)
-    try {
-      await deleteProfile(selectedProfile.name)
-      const nextProfiles = profilesDraft.filter(profile => profile.name !== selectedProfile.name)
-      const payload: PreferencesPayloadDto = { defaultHighlights: defaultsDraft, profiles: nextProfiles }
-      setPreferences(payload)
-      setProfilesDraft(nextProfiles)
-      setSelectedProfileIndex(nextProfiles.length > 0 ? 0 : null)
-      setSelectedProfileOriginalName(nextProfiles[0]?.name ?? null)
-    } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete profile.')
-    } finally {
-      setIsSaving(false)
-    }
+    updateSelectedProfile({ dicoHiddenLog: [...(selectedProfile.dicoHiddenLog ?? []), emptyHiddenLine()] })
   }
 
-  const saveDefaults = async () => {
-    setIsSaving(true)
-    try {
-      await saveDefaultHighlights(defaultsDraft)
-      setPreferences({ defaultHighlights: defaultsDraft, profiles: profilesDraft })
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save default highlights.')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const saveSelectedProfile = async () => {
+  const updateHiddenLine = (index: number, patch: Partial<HiddenLineDto>) => {
     if (!selectedProfile) return
+    updateSelectedProfile({
+      dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).map((line, current) =>
+        current === index ? { ...line, ...patch } : line
+      ),
+    })
+  }
+
+  const removeHiddenLine = (index: number) => {
+    if (!selectedProfile) return
+    updateSelectedProfile({
+      dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).filter((_, current) => current !== index),
+    })
+  }
+
+  const addStoredFilter = () => {
+    if (!selectedProfile) return
+    const current = selectedProfile.dicoStoredFilter ?? []
+    const next = [...current, emptyStoredFilter(current.length)]
+    updateSelectedProfile({ dicoStoredFilter: next })
+    setSelectedStoredFilterIndex(next.length - 1)
+  }
+
+  const removeStoredFilter = () => {
+    if (!selectedProfile || selectedStoredFilterIndex === null) return
+    const next = (selectedProfile.dicoStoredFilter ?? []).filter((_, index) => index !== selectedStoredFilterIndex)
+    updateSelectedProfile({ dicoStoredFilter: next })
+    setSelectedStoredFilterIndex(next.length > 0 ? 0 : null)
+  }
+
+  const saveAll = async () => {
     setIsSaving(true)
+    setError(null)
     try {
-      await updateProfile(selectedProfileOriginalName ?? selectedProfile.name, selectedProfile)
-      setSelectedProfileOriginalName(selectedProfile.name)
-      setPreferences({ defaultHighlights: defaultsDraft, profiles: profilesDraft })
+      const payload: PreferencesPayloadDto = {
+        defaultHighlights: defaultsDraft,
+        profiles: profilesDraft,
+      }
+      const saved = await savePreferences(payload)
+      setTheme(themeDraft)
+      setFontFamily(fontFamilyDraft)
+      setFontSize(fontSizeDraft)
+      setPreferences(saved)
+      setDefaultsDraft(saved.defaultHighlights ?? [])
+      setProfilesDraft(saved.profiles ?? [])
+      setSelectedProfileIndex(saved.profiles.length > 0 ? 0 : null)
+      setSelectedStoredFilterIndex(saved.profiles[0]?.dicoStoredFilter?.length ? 0 : null)
+      onClose()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save profile.')
+      setError(saveError instanceof Error ? saveError.message : 'Could not save preferences.')
     } finally {
       setIsSaving(false)
     }
@@ -249,7 +348,10 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
             <h2>Preferences</h2>
             <p>Manage user display preferences and shared highlights/profiles.</p>
           </div>
-          <button className="control-button control-button--ghost" onClick={onClose}>Close</button>
+          <div className="settings-actions-row">
+            <button className="control-button control-button--primary" onClick={saveAll} disabled={isSaving}>Save</button>
+            <button className="control-button control-button--ghost" onClick={onClose}>Cancel</button>
+          </div>
         </div>
 
         {error && <div className="settings-error">{error}</div>}
@@ -262,20 +364,20 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
             <div className="settings-form-grid">
               <label>
                 Theme
-                <select className="control-input" value={theme} onChange={event => setTheme(event.target.value as 'dark' | 'light')}>
+                <select className="control-input" value={themeDraft} onChange={event => setThemeDraft(event.target.value as 'dark' | 'light')}>
                   <option value="dark">Dark</option>
                   <option value="light">Light</option>
                 </select>
               </label>
               <label>
                 Font
-                <select className="control-input" value={fontFamily} onChange={event => setFontFamily(event.target.value as UserFontFamily)}>
+                <select className="control-input" value={fontFamilyDraft} onChange={event => setFontFamilyDraft(event.target.value as UserFontFamily)}>
                   {FONT_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
                 </select>
               </label>
               <label>
                 Text size
-                <input className="control-input" type="number" min={10} max={22} value={fontSize} onChange={event => setFontSize(Number(event.target.value))} />
+                <input className="control-input" type="number" min={10} max={22} value={fontSizeDraft} onChange={event => setFontSizeDraft(Number(event.target.value))} />
               </label>
             </div>
           </section>
@@ -287,8 +389,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
               <h3>Profiles</h3>
               <div className="settings-actions-row">
                 <button className="control-button control-button--ghost" onClick={createProfile}>New</button>
-                <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile || isSaving}>Delete</button>
-                <button className="control-button control-button--primary" onClick={saveSelectedProfile} disabled={!selectedProfile || isSaving}>Save profile</button>
+                <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile}>Delete</button>
               </div>
             </div>
             <div className="settings-split-layout">
@@ -299,7 +400,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                     className={`settings-list-item ${selectedProfileIndex === index ? 'settings-list-item--active' : ''}`}
                     onClick={() => {
                       setSelectedProfileIndex(index)
-                      setSelectedProfileOriginalName(profile.name)
+                      setSelectedStoredFilterIndex(profile.dicoStoredFilter?.length ? 0 : null)
                     }}
                   >
                     {profile.name}
@@ -323,11 +424,84 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                         <input className="control-input" value={selectedProfile.loadingParam ?? ''} onChange={event => updateSelectedProfile({ loadingParam: event.target.value })} />
                       </label>
                     </div>
-                    <HighlightListEditor
-                      title="Profile highlights"
-                      rules={selectedProfile.dicoHighLighting ?? []}
-                      onChange={rules => updateSelectedProfile({ dicoHighLighting: rules })}
-                    />
+
+                    <div className="settings-actions-row profile-tabs">
+                      <button className={`control-chip ${activeProfileTab === 'highlight' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('highlight')}>Highlight</button>
+                      <button className={`control-chip ${activeProfileTab === 'hidden' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('hidden')}>Hidden lines</button>
+                      <button className={`control-chip ${activeProfileTab === 'stored' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('stored')}>Stored filter</button>
+                    </div>
+
+                    {activeProfileTab === 'highlight' && (
+                      <HighlightListEditor
+                        title="Profile highlights"
+                        rules={selectedProfile.dicoHighLighting ?? []}
+                        onChange={rules => updateSelectedProfile({ dicoHighLighting: rules })}
+                      />
+                    )}
+
+                    {activeProfileTab === 'hidden' && (
+                      <section className="settings-card">
+                        <div className="settings-card__header">
+                          <h3>Hidden lines</h3>
+                          <button className="control-button control-button--ghost" onClick={addHiddenLine}>Add hidden line</button>
+                        </div>
+                        <div className="settings-list-panel">
+                          {(selectedProfile.dicoHiddenLog ?? []).length === 0 && <div className="empty-state compact-empty-state">No hidden lines configured.</div>}
+                          {(selectedProfile.dicoHiddenLog ?? []).map((line, index) => (
+                            <div key={`${selectedProfile.name}-hidden-${index}`} className="settings-row-line">
+                              <input className="control-input" value={line.text} placeholder="Pattern" onChange={event => updateHiddenLine(index, { text: event.target.value })} />
+                              <label className="settings-inline-check"><input type="checkbox" checked={line.isRegex} onChange={event => updateHiddenLine(index, { isRegex: event.target.checked })} />Regex</label>
+                              <label className="settings-inline-check"><input type="checkbox" checked={line.caseSensitive} onChange={event => updateHiddenLine(index, { caseSensitive: event.target.checked })} />Case</label>
+                              <label className="settings-inline-check"><input type="checkbox" checked={line.isActif} onChange={event => updateHiddenLine(index, { isActif: event.target.checked })} />Active</label>
+                              <button className="control-button control-button--ghost" onClick={() => removeHiddenLine(index)}>Delete</button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {activeProfileTab === 'stored' && (
+                      <section className="settings-card">
+                        <div className="settings-card__header">
+                          <h3>Stored filters</h3>
+                          <div className="settings-actions-row">
+                            <button className="control-button control-button--ghost" onClick={addStoredFilter}>Add</button>
+                            <button className="control-button control-button--ghost" onClick={removeStoredFilter} disabled={!selectedStoredFilter}>Delete</button>
+                          </div>
+                        </div>
+                        <div className="settings-form-grid">
+                          <label>
+                            Stored filter
+                            <select
+                              className="control-input"
+                              value={selectedStoredFilterIndex ?? ''}
+                              onChange={event => setSelectedStoredFilterIndex(event.target.value === '' ? null : Number(event.target.value))}
+                            >
+                              <option value="">Select a filter</option>
+                              {(selectedProfile.dicoStoredFilter ?? []).map((filter, index) => (
+                                <option key={`${filter.name}-${index}`} value={index}>{filter.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        {selectedStoredFilter ? (
+                          <div className="settings-row-line settings-row-line--stacked">
+                            <label>
+                              Name
+                              <input className="control-input" value={selectedStoredFilter.name} onChange={event => updateSelectedStoredFilter({ name: event.target.value })} />
+                            </label>
+                            <label>
+                              Filter
+                              <input className="control-input" value={selectedStoredFilter.filter} onChange={event => updateSelectedStoredFilter({ filter: event.target.value })} />
+                            </label>
+                            <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={event => updateSelectedStoredFilter({ isRegex: event.target.checked })} />Regex</label>
+                            <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.caseSensitive} onChange={event => updateSelectedStoredFilter({ caseSensitive: event.target.checked })} />Case sensitive</label>
+                          </div>
+                        ) : (
+                          <div className="empty-state compact-empty-state">Select or create a stored filter.</div>
+                        )}
+                      </section>
+                    )}
                   </>
                 ) : (
                   <div className="empty-state compact-empty-state">Select or create a profile.</div>
@@ -335,10 +509,6 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
               </div>
             </div>
           </section>
-        </div>
-
-        <div className="settings-screen__footer">
-          <button className="control-button control-button--primary" onClick={saveDefaults} disabled={isSaving}>Save default highlights</button>
         </div>
       </div>
     </div>

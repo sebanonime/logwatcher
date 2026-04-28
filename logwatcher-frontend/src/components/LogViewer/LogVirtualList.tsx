@@ -13,6 +13,7 @@ interface LogVirtualListProps {
   sessionId: string
   hub: HubConnection
   highlightingRules: HighlightingRule[]
+  fallbackHighlightingRules?: HighlightingRule[]
   tailMode: boolean
 }
 
@@ -21,10 +22,10 @@ interface LogVirtualListProps {
  * Uses TanStack Virtual to render only ~20-50 rows at a time regardless of file size.
  * Fetches missing line chunks from the server as the user scrolls.
  */
-export function LogVirtualList({ sessionId, hub, highlightingRules, tailMode }: LogVirtualListProps) {
+export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHighlightingRules = [], tailMode }: LogVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const { totalLines, ensureRange, getLineText } = useVirtualLines(sessionId, hub)
-  const { highlightLine } = useHighlighting(highlightingRules)
+  const { highlightLine } = useHighlighting(highlightingRules, fallbackHighlightingRules)
   const { setSelectedLine, getSelectedLine } = useLogStore()
   const selectedLine = getSelectedLine(sessionId)
 
@@ -55,6 +56,12 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, tailMode }: 
       virtualizer.scrollToIndex(totalLines - 1, { align: 'end' })
     }
   }, [tailMode, totalLines, virtualizer])
+
+  useEffect(() => {
+    if (selectedLine && selectedLine.lineNumber >= 0 && selectedLine.lineNumber < totalLines) {
+      virtualizer.scrollToIndex(selectedLine.lineNumber, { align: 'center' })
+    }
+  }, [selectedLine?.lineNumber, totalLines, virtualizer])
 
   return (
     <div

@@ -5,11 +5,34 @@ import { usePerimeterStore } from '../../store/perimeterStore'
 import { useTabStore } from '../../store/logStore'
 import { getLogHub } from '../../signalr/logHubConnection'
 import { startLogHub } from '../../signalr/logHubConnection'
-import type { RemoteFileInfoDto } from '../../types'
+import { usePreferencesStore } from '../../store/preferencesStore'
+import type { ProfileDto, RemoteFileInfoDto } from '../../types'
 
 /** Extract just the last segment from a path, handling / and \ separators */
 function basename(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path
+}
+
+function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | null {
+  const fileName = basename(filePath)
+  for (const profile of profiles) {
+    const params = (profile.loadingParam ?? '')
+      .split(';')
+      .map(param => param.trim())
+      .filter(Boolean)
+
+    for (const param of params) {
+      try {
+        if (filePath.includes(param)) return profile
+        if (new RegExp(param, 'i').test(filePath)) return profile
+        if (new RegExp(param, 'i').test(fileName)) return profile
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -30,6 +53,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   } = useBrowserStore()
 
   const { addTab, removeTab } = useTabStore()
+  const profiles = usePreferencesStore(state => state.profiles)
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
 
   const handleSelectRoot = useCallback((rootName: string) => {
@@ -54,6 +78,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
 
     const hub = getLogHub()
     const sessionId = `${server.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const matchedProfile = matchProfile(profiles, file.path)
     addTab({
       sessionId,
       serverId: server.id,
@@ -66,15 +91,24 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
       newLinesCount: 0,
       tailMode: true,
       isFiltered: false,
+      activeProfileName: matchedProfile?.name,
     })
     try {
       await startLogHub()
-      await hub.invoke('OpenLog', sessionId, server.id, file.path, { loadFromEnd: true, initialLines: 500 })
+      await hub.invoke('OpenLog', sessionId, server.id, file.path, {
+        loadFromEnd: true,
+        initialLines: 500,
+        profileName: matchedProfile?.name,
+        encoding: matchedProfile?.encoding,
+      })
+      if (matchedProfile?.name) {
+        await hub.invoke('SetProfile', sessionId, matchedProfile.name)
+      }
     } catch (e) {
       removeTab(sessionId)
       console.error('Failed to open log session', e)
     }
-  }, [selectedPerimeterId, selectedRootFolder, perimeters, addTab, removeTab])
+  }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, addTab, removeTab])
 
   const filteredSubfolders = subfolders.filter(f =>
     basename(f.path).toLowerCase().includes(subfoldersFilter.toLowerCase())

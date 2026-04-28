@@ -70,12 +70,27 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   }, [selectedRoot])
 
   const savePerimeter = async () => {
+    const trimmedName = perimeterName.trim()
+    if (!trimmedName) {
+      setError('Perimeter name is required.')
+      return
+    }
+
+    const perimeterNameExists = perimeters.some(perimeter =>
+      perimeter.id !== selectedPerimeterId && perimeter.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
+    )
+    if (perimeterNameExists) {
+      setError(`Perimeter '${trimmedName}' already exists.`)
+      return
+    }
+
     setIsSaving(true)
+    setError(null)
     try {
       if (selectedPerimeter) {
-        await updatePerimeter(selectedPerimeter.id, { ...selectedPerimeter, name: perimeterName })
+        await updatePerimeter(selectedPerimeter.id, { ...selectedPerimeter, name: trimmedName })
       } else {
-        await createPerimeter({ name: perimeterName })
+        await createPerimeter({ name: trimmedName })
       }
       await load()
       await fetchPerimeters()
@@ -88,16 +103,31 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
   const saveRoot = async () => {
     if (!selectedPerimeterId) return
+    const trimmedName = rootName.trim()
+    if (!trimmedName) {
+      setError('Root name is required.')
+      return
+    }
+
+    const rootNameExists = (selectedPerimeter?.rootFolders ?? []).some(root =>
+      root.name !== selectedRootName && root.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
+    )
+    if (rootNameExists) {
+      setError(`Root '${trimmedName}' already exists.`)
+      return
+    }
+
     setIsSaving(true)
+    setError(null)
     try {
       if (selectedRoot) {
-        await updateRoot(selectedPerimeterId, selectedRoot.name, { name: rootName })
+        await updateRoot(selectedPerimeterId, selectedRoot.name, { name: trimmedName })
       } else {
-        await createRoot(selectedPerimeterId, { name: rootName, servers: [] })
+        await createRoot(selectedPerimeterId, { name: trimmedName, servers: [] })
       }
       await load()
       await fetchPerimeters()
-      setSelectedRootName(rootName)
+      setSelectedRootName(trimmedName)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save root.')
     } finally {
@@ -107,12 +137,28 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
   const savePath = async () => {
     if (!selectedPerimeterId || !selectedRootName) return
+    const trimmedName = serverDraft.name.trim()
+    if (!trimmedName) {
+      setError('Path name is required.')
+      return
+    }
+
+    const pathNameExists = (selectedRoot?.servers ?? []).some(server =>
+      server.id !== serverDraft.id && server.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
+    )
+    if (pathNameExists) {
+      setError(`Path '${trimmedName}' already exists.`)
+      return
+    }
+
     setIsSaving(true)
+    setError(null)
     try {
+      const payload = { ...serverDraft, name: trimmedName }
       if (serverDraft.id) {
-        await updatePath(selectedPerimeterId, selectedRootName, serverDraft.id, serverDraft)
+        await updatePath(selectedPerimeterId, selectedRootName, serverDraft.id, payload)
       } else {
-        await createPath(selectedPerimeterId, selectedRootName, serverDraft)
+        await createPath(selectedPerimeterId, selectedRootName, payload)
       }
       await load()
       await fetchPerimeters()
