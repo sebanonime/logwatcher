@@ -1,0 +1,18 @@
+{
+  "DefaultHighlights": [
+    {
+      "Order": 0,
+      "Text": "INFO",
+      "ForeColorArgb": -1,
+      "BackColorArgb": 0,
+      "DarkForeColorArgb": -436018,
+      "DarkBackColorArgb": -14408668,
+      "LightForeColorArgb": -297751,
+      "LightBackColorArgb": 0,
+      "Bold": false,
+      "HightPriority": false,
+      "CaseSensitive": false,
+      "IsRegex": false
+    }
+  ]
+}

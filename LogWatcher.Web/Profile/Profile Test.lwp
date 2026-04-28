@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Profile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Name>Profile Test</Name>
+  <LoadingParam>testLog</LoadingParam>
+  <Encoding>UTF-8</Encoding>
+  <DicoHighLighting>
+    <Highlighting>
+      <Order>0</Order>
+      <Text>DEBUG</Text>
+      <ForeColorArgb>-1</ForeColorArgb>
+      <BackColorArgb>0</BackColorArgb>
+      <DarkForeColorArgb>-14079703</DarkForeColorArgb>
+      <DarkBackColorArgb>-11035660</DarkBackColorArgb>
+      <LightForeColorArgb>-16777216</LightForeColorArgb>
+      <LightBackColorArgb>0</LightBackColorArgb>
+      <Bold>false</Bold>
+      <HightPriority>false</HightPriority>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </Highlighting>
+  </DicoHighLighting>
+  <DicoHiddenLog />
+  <DicoStoredFilter />
+</Profile>

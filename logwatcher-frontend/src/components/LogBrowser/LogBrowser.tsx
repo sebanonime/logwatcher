@@ -21,7 +21,7 @@ function basename(path: string): string {
  * │ Files [filter]                 │
  * └────────────────────────────────┘
  */
-export function LogBrowser() {
+export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { perimeters, selectedPerimeterId } = usePerimeterStore()
   const {
     selectedRootFolder, subfolders, subfoldersFilter, selectedSubfolder,
@@ -85,6 +85,12 @@ export function LogBrowser() {
 
   return (
     <div className="browser-shell">
+      <div className="browser-toolbar">
+        <span className="section-label">LogBrowser</span>
+        <button className="control-button control-button--ghost browser-toolbar__button" onClick={onOpenSettings} title="LogBrowser settings">
+          <span aria-hidden>⚙</span>
+        </button>
+      </div>
       <div className="browser-content-split">
         <Group orientation="vertical" style={{ height: '100%' }}>
           <Panel defaultSize={58} minSize={28}>

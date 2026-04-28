@@ -104,6 +104,86 @@ namespace LogWatcher.Web.Config
             }
         }
 
+        public RootFolderDefinition UpsertRoot(string perimeterId, RootFolderDefinition root)
+        {
+            lock (_lock)
+            {
+                var perimeter = _perimeters.FirstOrDefault(p => p.Id == perimeterId);
+                if (perimeter == null)
+                    throw new InvalidOperationException($"Perimeter '{perimeterId}' not found.");
+
+                var existing = perimeter.RootFolders.FirstOrDefault(r =>
+                    string.Equals(r.Name, root.Name, StringComparison.OrdinalIgnoreCase));
+                if (existing == null)
+                {
+                    existing = new RootFolderDefinition { Name = root.Name };
+                    perimeter.RootFolders.Add(existing);
+                }
+
+                existing.Name = root.Name;
+                existing.Servers ??= new List<ServerDefinition>();
+                Save();
+                return existing;
+            }
+        }
+
+        public bool RemoveRoot(string perimeterId, string rootName)
+        {
+            lock (_lock)
+            {
+                var perimeter = _perimeters.FirstOrDefault(p => p.Id == perimeterId);
+                if (perimeter == null)
+                    return false;
+
+                var removed = perimeter.RootFolders.RemoveAll(r =>
+                    string.Equals(r.Name, rootName, StringComparison.OrdinalIgnoreCase));
+                if (removed > 0)
+                    Save();
+                return removed > 0;
+            }
+        }
+
+        public ServerDefinition UpsertServer(string perimeterId, string rootName, ServerDefinition server)
+        {
+            lock (_lock)
+            {
+                var perimeter = _perimeters.FirstOrDefault(p => p.Id == perimeterId);
+                var root = perimeter?.RootFolders.FirstOrDefault(r =>
+                    string.Equals(r.Name, rootName, StringComparison.OrdinalIgnoreCase));
+                if (root == null)
+                    throw new InvalidOperationException($"Root '{rootName}' not found in perimeter '{perimeterId}'.");
+
+                if (string.IsNullOrWhiteSpace(server.Id))
+                    server.Id = Guid.NewGuid().ToString("N")[..8];
+
+                var existingIndex = root.Servers.FindIndex(s => s.Id == server.Id);
+                if (existingIndex >= 0)
+                    root.Servers[existingIndex] = server;
+                else
+                    root.Servers.Add(server);
+
+                Save();
+                return server;
+            }
+        }
+
+        public bool RemoveServer(string perimeterId, string rootName, string serverId)
+        {
+            lock (_lock)
+            {
+                var perimeter = _perimeters.FirstOrDefault(p => p.Id == perimeterId);
+                var root = perimeter?.RootFolders.FirstOrDefault(r =>
+                    string.Equals(r.Name, rootName, StringComparison.OrdinalIgnoreCase));
+                if (root == null)
+                    return false;
+
+                var removed = root.Servers.RemoveAll(s => s.Id == serverId);
+                if (removed > 0)
+                    Save();
+                return removed > 0;
+            }
+        }
+
         // ── Persistence ──────────────────────────────────────────────────
 
         private List<PerimeterDefinition> Load()

@@ -9,9 +9,9 @@ import { useUiStore } from '../../store/uiStore'
 interface MainToolbarProps {
   hub: HubConnection
   onSwitchPerimeter: () => void
+  onOpenPreferences: () => void
   onLogout: () => void
   onFilterApplied?: () => void
-  /** Pattern injected from filter history panel — consumed once and applied */
   pendingPattern?: string | null
   onPendingPatternConsumed?: () => void
 }
@@ -19,7 +19,7 @@ interface MainToolbarProps {
 /**
  * Top toolbar: perimeter selector + filter controls for the active log tab + tail toggle.
  */
-export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
+export function MainToolbar({ hub, onSwitchPerimeter, onOpenPreferences, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
   const { tabs, activeSessionId, updateTab } = useTabStore()
   const { perimeters, selectedPerimeterId } = usePerimeterStore()
   const { addEntry } = useFilterHistory()
@@ -125,6 +125,10 @@ export function MainToolbar({ hub, onSwitchPerimeter, onLogout, onFilterApplied,
               {activeTab.errorMessage}
             </span>
           )}
+
+          <button onClick={onOpenPreferences} className="control-button control-button--ghost">
+            Prefs
+          </button>
 
           <button onClick={toggleTheme} className="control-button control-button--ghost">
             {theme === 'dark' ? 'Light' : 'Dark'}

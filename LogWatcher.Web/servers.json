@@ -1,28 +1,32 @@
 [
   {
-    "id": "EUGV",
-    "name": "EUGV",
-    "rootFolders": [
+    "Id": "EUGV",
+    "Name": "EUGV",
+    "RootFolders": [
       {
-        "name": "Hom",
-        "servers": [
+        "Name": "Hom",
+        "Servers": [
           {
-            "id": "local1",
-            "name": "Local 1",
-            "type": "local",
-            "host": "C:\\TestLog\\TestLog1",
-            "agentId": null,
-            "username": null
+            "Id": "local1",
+            "Name": "Local 1",
+            "Type": "local",
+            "Host": "C:\\TestLog\\TestLog1",
+            "AgentId": null,
+            "Username": null
           },
           {
-            "id": "local",
-            "name": "Local 2",
-            "type": "local",
-            "host": "C:\\TestLog\\TestLog2",
-            "agentId": null,
-            "username": null
+            "Id": "local",
+            "Name": "Local 2",
+            "Type": "local",
+            "Host": "C:\\TestLog\\TestLog2",
+            "AgentId": null,
+            "Username": null
           }
         ]
+      },
+      {
+        "Name": "Dev",
+        "Servers": []
       }
     ]
   }

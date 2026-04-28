@@ -1,5 +1,3 @@
-// ─── Domain types shared across the app ───────────────────────────────────
-
 export interface LineDto {
   lineNumber: number
   text: string
@@ -55,20 +53,49 @@ export interface RemoteFileInfoDto {
   serverId: string
 }
 
-// ─── Highlighting rule (matches Common/Highlighting.cs) ────────────────────
-
 export interface HighlightingRule {
   order: number
   text: string
-  foreColorArgb: number    // ARGB int from .NET Color
+  foreColorArgb: number
   backColorArgb: number
+  darkForeColorArgb?: number
+  darkBackColorArgb?: number
+  lightForeColorArgb?: number
+  lightBackColorArgb?: number
   bold: boolean
   hightPriority: boolean
   caseSensitive: boolean
   isRegex: boolean
 }
 
-// ─── Tab state ─────────────────────────────────────────────────────────────
+export interface HiddenLineDto {
+  isActif: boolean
+  text: string
+  caseSensitive: boolean
+  isRegex: boolean
+}
+
+export interface StoredFilterDto {
+  name: string
+  filter: string
+  isRegex: boolean
+  caseSensitive: boolean
+}
+
+export interface ProfileDto {
+  name: string
+  loadingParam: string
+  encoding: string
+  shared: boolean
+  dicoHighLighting: HighlightingRule[]
+  dicoHiddenLog: HiddenLineDto[]
+  dicoStoredFilter: StoredFilterDto[]
+}
+
+export interface PreferencesPayloadDto {
+  defaultHighlights: HighlightingRule[]
+  profiles: ProfileDto[]
+}
 
 export interface LogTab {
   sessionId: string
@@ -79,38 +106,10 @@ export interface LogTab {
   totalLines: number
   sizeBytes: number
   isIndexed: boolean
-  newLinesCount: number   // lines added while user is scrolled up
+  newLinesCount: number
   tailMode: boolean
   isFiltered: boolean
   errorMessage?: string
 }
 
-
-// ─── Highlighting rule (matches Common/Highlighting.cs) ────────────────────
-
-export interface HighlightingRule {
-  order: number
-  text: string
-  foreColorArgb: number    // ARGB int from .NET Color
-  backColorArgb: number
-  bold: boolean
-  hightPriority: boolean
-  caseSensitive: boolean
-  isRegex: boolean
-}
-
-// ─── Tab state ─────────────────────────────────────────────────────────────
-
-export interface LogTab {
-  sessionId: string
-  serverId: string
-  filePath: string
-  displayName: string
-  serverName: string
-  totalLines: number
-  sizeBytes: number
-  isIndexed: boolean
-  newLinesCount: number   // lines added while user is scrolled up
-  tailMode: boolean
-  isFiltered: boolean
-}
+export type UserFontFamily = 'Cascadia Code' | 'Consolas' | 'Segoe UI' | 'Bahnschrift'

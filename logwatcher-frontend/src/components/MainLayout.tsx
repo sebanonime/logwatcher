@@ -10,19 +10,23 @@ import { useUiStore } from '../store/uiStore'
 interface MainLayoutProps {
   hub: HubConnection
   onSwitchPerimeter: () => void
+  onOpenPreferences: () => void
+  onOpenLogBrowserSettings: () => void
   onLogout: () => void
 }
 
-export function MainLayout({ hub, onSwitchPerimeter, onLogout }: MainLayoutProps) {
+export function MainLayout({ hub, onSwitchPerimeter, onOpenPreferences, onOpenLogBrowserSettings, onLogout }: MainLayoutProps) {
   const [filterRefreshTick, setFilterRefreshTick] = useState(0)
   const [pendingPattern, setPendingPattern] = useState<string | null>(null)
   const [isBrowserVisible, setIsBrowserVisible] = useState(true)
   const [isInspectorVisible, setIsInspectorVisible] = useState(true)
-  const { theme } = useUiStore()
+  const { theme, fontFamily, fontSize } = useUiStore()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-  }, [theme])
+    document.documentElement.style.setProperty('--user-font-family', fontFamily)
+    document.documentElement.style.setProperty('--user-font-size', `${fontSize}px`)
+  }, [theme, fontFamily, fontSize])
 
   const handleFilterApplied = useCallback(() => {
     setFilterRefreshTick(t => t + 1)
@@ -45,6 +49,7 @@ export function MainLayout({ hub, onSwitchPerimeter, onLogout }: MainLayoutProps
       <MainToolbar
         hub={hub}
         onSwitchPerimeter={onSwitchPerimeter}
+        onOpenPreferences={onOpenPreferences}
         onLogout={onLogout}
         onFilterApplied={handleFilterApplied}
         pendingPattern={pendingPattern}
@@ -57,7 +62,7 @@ export function MainLayout({ hub, onSwitchPerimeter, onLogout }: MainLayoutProps
           {isBrowserVisible && (
             <Panel defaultSize={24} minSize={0}>
               <div className="workspace-panel workspace-panel--browser">
-                <LogBrowser />
+                <LogBrowser onOpenSettings={onOpenLogBrowserSettings} />
               </div>
             </Panel>
           )}

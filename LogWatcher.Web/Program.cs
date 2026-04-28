@@ -17,6 +17,8 @@ authProvider.ConfigureServices(builder.Services, config);
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<CredentialStore>();
 builder.Services.AddSingleton<ServerConfigRepository>();
+builder.Services.AddSingleton<CommonPreferencesRepository>();
+builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
 builder.Services.AddSingleton<WatchSessionManager>();
 

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { HighlightingRule } from '../types'
+import { useUiStore } from '../store/uiStore'
 
 export interface Segment {
   text: string
@@ -8,26 +9,31 @@ export interface Segment {
   bold?: boolean
 }
 
-/**
- * Converts a .NET ARGB int to a CSS hex color string.
- * Handles the case where the ARGB value is 0 (transparent / not set).
- */
-function argbToCss(argb: number): string | undefined {
-  if (argb === 0 || argb === -1) return undefined
-  // Mask to RGB (drop alpha for CSS background-color)
+function argbToCss(argb: number | undefined): string | undefined {
+  if (argb === undefined || argb === 0 || argb === -1) return undefined
   const rgb = argb & 0xFFFFFF
   return `#${rgb.toString(16).padStart(6, '0')}`
 }
 
-/**
- * Compiles a set of highlighting rules into a fast match function.
- * Returns a function that splits a log line text into colored segments.
- * All computation is synchronous and runs in the render cycle — zero server cost.
- */
+function getRuleColor(rule: HighlightingRule, theme: 'dark' | 'light') {
+  if (theme === 'dark') {
+    return {
+      foreColor: argbToCss(rule.darkForeColorArgb ?? rule.foreColorArgb),
+      backColor: argbToCss(rule.darkBackColorArgb ?? rule.backColorArgb),
+    }
+  }
+
+  return {
+    foreColor: argbToCss(rule.lightForeColorArgb ?? rule.foreColorArgb),
+    backColor: argbToCss(rule.lightBackColorArgb ?? rule.backColorArgb),
+  }
+}
+
 export function useHighlighting(rules: HighlightingRule[]) {
+  const theme = useUiStore(state => state.theme)
+
   const sortedRules = useMemo(
     () => [...rules].sort((a, b) => {
-      // High-priority rules first, then by order ascending
       if (a.hightPriority !== b.hightPriority) return a.hightPriority ? -1 : 1
       return a.order - b.order
     }),
@@ -54,17 +60,18 @@ export function useHighlighting(rules: HighlightingRule[]) {
       }
 
       if (match) {
+        const colors = getRuleColor(rule, theme)
         return [{
           text,
-          foreColor: argbToCss(rule.foreColorArgb),
-          backColor: argbToCss(rule.backColorArgb),
+          foreColor: colors.foreColor,
+          backColor: colors.backColor,
           bold: rule.bold,
         }]
       }
     }
 
     return [{ text }]
-  }, [sortedRules])
+  }, [sortedRules, theme])
 
   return { highlightLine }
 }

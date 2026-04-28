@@ -61,6 +61,11 @@ namespace LogWatcher.Common
             set { _backColorArgb = value; }
         }
 
+        public int DarkForeColorArgb { get; set; }
+        public int DarkBackColorArgb { get; set; }
+        public int LightForeColorArgb { get; set; }
+        public int LightBackColorArgb { get; set; }
+
         public bool Bold { get; set; }
         public bool HightPriority { get; set; }
 
@@ -165,11 +170,27 @@ namespace LogWatcher.Common
             clone.Text = Text;
             clone.ForeColorArgb = ForeColorArgb;
             clone.BackColorArgb = BackColorArgb;
+            clone.DarkForeColorArgb = DarkForeColorArgb;
+            clone.DarkBackColorArgb = DarkBackColorArgb;
+            clone.LightForeColorArgb = LightForeColorArgb;
+            clone.LightBackColorArgb = LightBackColorArgb;
             clone.CaseSensitive = CaseSensitive;
             clone.HightPriority = HightPriority;
             clone.Bold = Bold;
             clone.IsRegex = IsRegex;
             return clone;
+        }
+
+        public int ResolveForeColorArgb(bool darkTheme)
+        {
+            var themedValue = darkTheme ? DarkForeColorArgb : LightForeColorArgb;
+            return themedValue != 0 ? themedValue : ForeColorArgb;
+        }
+
+        public int ResolveBackColorArgb(bool darkTheme)
+        {
+            var themedValue = darkTheme ? DarkBackColorArgb : LightBackColorArgb;
+            return themedValue != 0 ? themedValue : BackColorArgb;
         }
     }
 }
