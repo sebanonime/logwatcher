@@ -21,6 +21,14 @@
             "Host": "C:\\TestLog\\TestLog2",
             "AgentId": null,
             "Username": null
+          },
+          {
+            "Id": "9f17e53e",
+            "Name": "LogFile",
+            "Type": "local",
+            "Host": "C:\\TestLog\\TestLogFile",
+            "AgentId": "",
+            "Username": ""
           }
         ]
       },

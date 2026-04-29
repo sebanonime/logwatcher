@@ -47,7 +47,7 @@ function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | nu
 export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { perimeters, selectedPerimeterId, selectPerimeter } = usePerimeterStore()
   const {
-    selectedRootFolder, subfolders, subfoldersFilter, selectedSubfolder,
+    selectedRootFolder, subfolders, rootFiles, rootFilesFolderPath, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
     loadRoot, loadSubfolder, setSubfoldersFilter, setFilesFilter,
   } = useBrowserStore()
@@ -115,7 +115,19 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     }
   }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, addTab, removeTab])
 
-  const filteredSubfolders = subfolders.filter(f =>
+  const virtualRootFolder: RemoteFileInfoDto | null = rootFilesFolderPath && rootFiles.length > 0
+    ? {
+        path: rootFilesFolderPath,
+        isDirectory: true,
+        sizeBytes: 0,
+        lastModified: rootFiles[0]?.lastModified ?? new Date().toISOString(),
+        serverId: rootFiles[0]?.serverId ?? '',
+      }
+    : null
+
+  const displayedSubfolders = virtualRootFolder ? [virtualRootFolder, ...subfolders] : subfolders
+
+  const filteredSubfolders = displayedSubfolders.filter(f =>
     basename(f.path).toLowerCase().includes(subfoldersFilter.toLowerCase())
   )
   const filteredFiles = files.filter(f =>

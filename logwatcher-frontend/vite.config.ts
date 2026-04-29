@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as { version: string }
 const buildStamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 12)
 const appBuildId = `${packageJson.version}+${buildStamp}`
+console.log(`[logwatcher-frontend] Build ID: ${appBuildId}`)
 
 export default defineConfig({
   plugins: [react()],

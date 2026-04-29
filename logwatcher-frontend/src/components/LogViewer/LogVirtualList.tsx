@@ -31,8 +31,8 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const selectedLine = getSelectedLine(sessionId)
   const lastScrollTopRef = useRef(0)
   const wasNearBottomRef = useRef(true)
-  const disablingTailRef = useRef(false)
   const previousSelectedLineRef = useRef<number | null>(null)
+  const togglingTailRef = useRef(false)
 
   const virtualizer = useVirtualizer({
     count: totalLines,
@@ -72,15 +72,28 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     const nearBottom = el.scrollHeight - el.clientHeight - currentTop <= 8
 
     // If user was at bottom and starts scrolling up, disable tail automatically.
-    if (tailMode && scrollingUp && wasNearBottomRef.current && !nearBottom && !disablingTailRef.current) {
-      disablingTailRef.current = true
+    if (tailMode && scrollingUp && wasNearBottomRef.current && !nearBottom && !togglingTailRef.current) {
+      togglingTailRef.current = true
       updateTab(sessionId, { tailMode: false })
       try {
         await hub.invoke('SetTail', sessionId, false)
       } catch {
         // Keep local tail state off; transport errors are surfaced elsewhere.
       } finally {
-        disablingTailRef.current = false
+        togglingTailRef.current = false
+      }
+    }
+
+    // If user reaches bottom while tail is off, re-enable tail automatically.
+    if (!tailMode && nearBottom && !wasNearBottomRef.current && !togglingTailRef.current) {
+      togglingTailRef.current = true
+      updateTab(sessionId, { tailMode: true })
+      try {
+        await hub.invoke('SetTail', sessionId, true)
+      } catch {
+        // Keep local tail state on; transport errors are surfaced elsewhere.
+      } finally {
+        togglingTailRef.current = false
       }
     }
 

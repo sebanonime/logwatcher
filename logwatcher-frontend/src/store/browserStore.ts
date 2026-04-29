@@ -6,6 +6,8 @@ import { startLogHub } from '../signalr/logHubConnection'
 interface BrowserState {
   selectedRootFolder: string | null
   subfolders: RemoteFileInfoDto[]   // directories inside the root
+  rootFiles: RemoteFileInfoDto[]    // files directly inside the root path
+  rootFilesFolderPath: string | null
   subfoldersFilter: string
   selectedSubfolder: string | null
   files: RemoteFileInfoDto[]        // files inside the selected subfolder
@@ -21,8 +23,11 @@ interface BrowserState {
 }
 
 export const useBrowserStore = create<BrowserState>((set) => ({
+  
   selectedRootFolder: null,
   subfolders: [],
+  rootFiles: [],
+  rootFilesFolderPath: null,
   subfoldersFilter: '',
   selectedSubfolder: null,
   files: [],
@@ -31,17 +36,39 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   isLoadingFiles: false,
 
   loadRoot: async (perimeterId, rootFolderName) => {
-    set({ selectedRootFolder: rootFolderName, isLoadingSubfolders: true, subfolders: [], selectedSubfolder: null, files: [] })
+    set({ selectedRootFolder: rootFolderName, isLoadingSubfolders: true, subfolders: [], rootFiles: [], rootFilesFolderPath: null, selectedSubfolder: null, files: [] })
     try {
       await startLogHub()
       const hub = getLogHub()
       const items: RemoteFileInfoDto[] = await hub.invoke('BrowseRoot', perimeterId, rootFolderName, '')
-      set({ subfolders: items.filter(i => i.isDirectory) })
+      const directories = items.filter(i => i.isDirectory)
+      const directFiles = items.filter(i => !i.isDirectory)
+      const parentDir = directFiles.length > 0
+        ? directFiles[0].path.replace(/[\\/][^\\/]+$/, '')
+        : null
+      set({
+        subfolders: directories,
+        rootFiles: directFiles,
+        rootFilesFolderPath: parentDir,
+        // If root contains files directly, expose them immediately.
+        selectedSubfolder: parentDir,
+        files: directFiles,
+      })
     } catch { /* ignore */ }
     finally { set({ isLoadingSubfolders: false }) }
   },
 
   loadSubfolder: async (perimeterId, rootFolderName, subfolderPath) => {
+    if (subfolderPath === rootFolderName) {
+      set(state => ({ selectedSubfolder: state.rootFilesFolderPath ?? subfolderPath, files: state.rootFiles, isLoadingFiles: false }))
+      return
+    }
+
+    if (subfolderPath && subfolderPath === (useBrowserStore.getState().rootFilesFolderPath ?? '')) {
+      set(state => ({ selectedSubfolder: subfolderPath, files: state.rootFiles, isLoadingFiles: false }))
+      return
+    }
+
     set({ selectedSubfolder: subfolderPath, isLoadingFiles: true, files: [] })
     try {
       await startLogHub()
@@ -56,6 +83,6 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   setFilesFilter: (f) => set({ filesFilter: f }),
   reset: () => set({
     selectedRootFolder: null, subfolders: [], subfoldersFilter: '',
-    selectedSubfolder: null, files: [], filesFilter: '',
+    rootFiles: [], rootFilesFolderPath: null, selectedSubfolder: null, files: [], filesFilter: '',
   }),
 }))

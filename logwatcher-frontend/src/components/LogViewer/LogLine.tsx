@@ -37,6 +37,12 @@ export const LogLine = memo(function LogLine({
     ? { backgroundColor: segments[0].backColor }
     : undefined
 
+  const selectedStyle = isSelected
+    ? {
+        boxShadow: 'inset 0 0 0 2px var(--accent-2), inset 4px 0 0 0 var(--accent-strong)',
+      }
+    : undefined
+
   const content = segments && segments.length > 0
     ? segments.map((seg, i) => (
         <span
@@ -54,7 +60,7 @@ export const LogLine = memo(function LogLine({
   return (
     <div
       className={`log-row ${isSelected ? 'log-row--selected' : ''}`}
-      style={{ minHeight: 20, ...lineStyle }}
+      style={{ minHeight: 20, ...lineStyle, ...selectedStyle }}
       onClick={onClick}
     >
       <span className="log-row__content">{content}</span>
