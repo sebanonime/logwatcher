@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type { HubConnection } from '@microsoft/signalr'
 import { useVirtualLines } from '../../hooks/useVirtualLines'
 import { useHighlighting } from '../../hooks/useHighlighting'
-import { useLogStore } from '../../store/logStore'
+import { useLogStore, useTabStore } from '../../store/logStore'
 import { LogLine } from './LogLine'
 import type { HighlightingRule } from '../../types'
 
@@ -27,7 +27,12 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const { totalLines, ensureRange, getLineText } = useVirtualLines(sessionId, hub)
   const { highlightLine } = useHighlighting(highlightingRules, fallbackHighlightingRules)
   const { setSelectedLine, getSelectedLine } = useLogStore()
+  const { updateTab } = useTabStore()
   const selectedLine = getSelectedLine(sessionId)
+  const lastScrollTopRef = useRef(0)
+  const wasNearBottomRef = useRef(true)
+  const disablingTailRef = useRef(false)
+  const previousSelectedLineRef = useRef<number | null>(null)
 
   const virtualizer = useVirtualizer({
     count: totalLines,
@@ -54,19 +59,55 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   useEffect(() => {
     if (tailMode && totalLines > 0) {
       virtualizer.scrollToIndex(totalLines - 1, { align: 'end' })
+      wasNearBottomRef.current = true
     }
   }, [tailMode, totalLines, virtualizer])
 
-  useEffect(() => {
-    if (selectedLine && selectedLine.lineNumber >= 0 && selectedLine.lineNumber < totalLines) {
-      virtualizer.scrollToIndex(selectedLine.lineNumber, { align: 'center' })
+  const handleScroll = useCallback(async () => {
+    const el = parentRef.current
+    if (!el) return
+
+    const currentTop = el.scrollTop
+    const scrollingUp = currentTop < lastScrollTopRef.current
+    const nearBottom = el.scrollHeight - el.clientHeight - currentTop <= 8
+
+    // If user was at bottom and starts scrolling up, disable tail automatically.
+    if (tailMode && scrollingUp && wasNearBottomRef.current && !nearBottom && !disablingTailRef.current) {
+      disablingTailRef.current = true
+      updateTab(sessionId, { tailMode: false })
+      try {
+        await hub.invoke('SetTail', sessionId, false)
+      } catch {
+        // Keep local tail state off; transport errors are surfaced elsewhere.
+      } finally {
+        disablingTailRef.current = false
+      }
     }
-  }, [selectedLine?.lineNumber, totalLines, virtualizer])
+
+    lastScrollTopRef.current = currentTop
+    wasNearBottomRef.current = nearBottom
+  }, [tailMode, hub, sessionId, updateTab])
+
+  useEffect(() => {
+    const selected = selectedLine?.lineNumber
+    if (selected === undefined || selected < 0 || selected >= totalLines) return
+
+    const hasChanged = previousSelectedLineRef.current !== selected
+    previousSelectedLineRef.current = selected
+    if (!hasChanged) return
+
+    const firstVisible = virtualItems[0]?.index ?? 0
+    const lastVisible = virtualItems[virtualItems.length - 1]?.index ?? -1
+    if (selected < firstVisible || selected > lastVisible) {
+      virtualizer.scrollToIndex(selected, { align: 'center' })
+    }
+  }, [selectedLine?.lineNumber, totalLines, virtualItems, virtualizer])
 
   return (
     <div
       ref={parentRef}
       className="log-virtual-list"
+      onScroll={() => { void handleScroll() }}
     >
       <div
         style={{ height: virtualizer.getTotalSize(), position: 'relative' }}

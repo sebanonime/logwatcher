@@ -276,6 +276,15 @@ select {
   color: var(--ok);
 }
 
+.build-badge {
+  font-size: 10px;
+  color: var(--text-3);
+  opacity: 0.85;
+  padding: 0 4px;
+  white-space: nowrap;
+  user-select: text;
+}
+
 .workspace-body {
   flex: 1;
   min-height: 0;

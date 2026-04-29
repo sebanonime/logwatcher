@@ -37,6 +37,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
 
   const [pattern, setPattern] = useState('')
   const [isFiltering, setIsFiltering] = useState(false)
+  const buildId = __APP_BUILD__
 
   // Reset filter state when active tab changes
   useEffect(() => {
@@ -339,6 +340,10 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
           <button onClick={onOpenPreferences} className="control-button control-button--ghost" title="Preferences">
             ⚙
           </button>
+
+          <span className="build-badge" title={`Frontend build ${buildId}`}>
+            {buildId}
+          </span>
         </div>
       </div>
     </header>
