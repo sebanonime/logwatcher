@@ -11,10 +11,9 @@ interface MainLayoutProps {
   hub: HubConnection
   onOpenPreferences: () => void
   onOpenLogBrowserSettings: () => void
-  onLogout: () => void
 }
 
-export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings, onLogout }: MainLayoutProps) {
+export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }: MainLayoutProps) {
   const [filterRefreshTick, setFilterRefreshTick] = useState(0)
   const [pendingPattern, setPendingPattern] = useState<string | null>(null)
   const [isBrowserVisible, setIsBrowserVisible] = useState(true)
@@ -48,7 +47,6 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings, o
       <MainToolbar
         hub={hub}
         onOpenPreferences={onOpenPreferences}
-        onLogout={onLogout}
         onFilterApplied={handleFilterApplied}
         pendingPattern={pendingPattern}
         onPendingPatternConsumed={() => setPendingPattern(null)}

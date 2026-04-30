@@ -49,7 +49,6 @@ function LoggedInApp({ onLogout }: { onLogout: () => void }) {
         hub={hub}
         onOpenPreferences={() => setShowPreferences(true)}
         onOpenLogBrowserSettings={() => setShowLogBrowserSettings(true)}
-        onLogout={onLogout}
       />
       {showPreferences && <PreferencesScreen onClose={() => setShowPreferences(false)} />}
       {showLogBrowserSettings && <LogBrowserSettingsScreen onClose={() => setShowLogBrowserSettings(false)} />}

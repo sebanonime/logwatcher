@@ -210,8 +210,21 @@ select {
 
 .toolbar-filter-cluster .control-button,
 .toolbar-status-cluster .control-button {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
+  line-height: 1;
+}
+
+.toolbar-action-button {
+  width: 30px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.toolbar-action-button--active {
+  color: white;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  border-color: transparent;
 }
 
 .control-button:hover,
@@ -462,6 +475,12 @@ select {
   overflow: auto;
 }
 
+.rail-scroll {
+  width: 100%;
+  align-self: stretch;
+  overflow-x: hidden;
+}
+
 .browser-filter-row,
 .browser-files-header,
 .section-header-row {
@@ -501,6 +520,10 @@ select {
   padding: 1px 2px;
   color: var(--text-1);
   cursor: pointer;
+}
+
+.history-chip {
+  display: block;
 }
 
 .browser-item:hover,
@@ -658,9 +681,9 @@ select {
 }
 
 .tab-strip__toggle {
-  min-width: 22px;
-  min-height: 22px;
-  padding: 0 4px;
+  min-width: 88px;
+  min-height: 24px;
+  padding: 0 8px;
   flex-shrink: 0;
 }
 

@@ -37,7 +37,7 @@ export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaPro
             onClick={onToggleBrowser}
             title={isBrowserVisible ? 'Hide explorer' : 'Show explorer'}
           >
-            {isBrowserVisible ? '▤' : '▥'}
+            {isBrowserVisible ? '◂ Browser' : 'Browser ▸'}
           </button>
         </div>
         <div className="empty-state viewer-empty-state">
@@ -55,7 +55,7 @@ export function DockArea({ hub, isBrowserVisible, onToggleBrowser }: DockAreaPro
           onClick={onToggleBrowser}
           title={isBrowserVisible ? 'Hide explorer' : 'Show explorer'}
         >
-          {isBrowserVisible ? '▤' : '▥'}
+          {isBrowserVisible ? '◂ Browser' : 'Browser ▸'}
         </button>
         {tabs.map(tab => {
           const isActive = activeSessionId === tab.sessionId

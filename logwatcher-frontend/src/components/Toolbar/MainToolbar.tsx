@@ -9,7 +9,6 @@ import { usePreferencesStore } from '../../store/preferencesStore'
 interface MainToolbarProps {
   hub: HubConnection
   onOpenPreferences: () => void
-  onLogout: () => void
   onFilterApplied?: () => void
   pendingPattern?: string | null
   onPendingPatternConsumed?: () => void
@@ -18,7 +17,7 @@ interface MainToolbarProps {
 /**
  * Top toolbar: profile + filter controls for the active log tab + tail toggle.
  */
-export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
+export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
   const { tabs, activeSessionId, updateTab, setActive } = useTabStore()
   const { setSelectedLine, getLine, clearBuffer } = useLogStore()
   const profiles = usePreferencesStore(state => state.profiles)
@@ -70,7 +69,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
     if (!selectedFilter?.filter?.trim()) {
       await hub.invoke('ClearFilter', activeSessionId)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { isFiltered: false })
+      updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
       return
     }
 
@@ -105,7 +104,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
       updateTab(activeSessionId, { totalLines: 0 })
       await hub.invoke('ClearFilter', activeSessionId)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { isFiltered: false })
+      updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
       return
     }
 
@@ -152,7 +151,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
     updateTab(activeSessionId, { totalLines: 0 })
     await hub.invoke('ClearFilter', activeSessionId)
     clearBuffer(activeSessionId)
-    updateTab(activeSessionId, { isFiltered: false })
+    updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
   }, [hub, activeSessionId, updateTab, clearBuffer])
 
   const toggleTail = useCallback(async () => {
@@ -218,14 +217,20 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'F3') return
-      event.preventDefault()
-      void searchNext()
+      if (event.key === 'F3') {
+        event.preventDefault()
+        void searchNext()
+        return
+      }
+      if (event.key === 'F8' && activeTab?.isFiltered) {
+        event.preventDefault()
+        void clearFilter()
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [searchNext])
+  }, [searchNext, clearFilter, activeTab?.isFiltered])
 
   return (
     <header className="chrome-bar">
@@ -298,32 +303,32 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
           <button
             onClick={applyFilter}
             disabled={isFiltering || !activeTab}
-            className="control-button control-button--primary"
-            title="Apply filter"
+            className="control-button control-button--ghost toolbar-action-button"
+            title="Apply filter (Enter)"
           >
-            {isFiltering ? '…' : '⎚'}
+            {isFiltering ? '…' : '✓'}
           </button>
 
           <button
             onClick={searchNext}
             disabled={!activeTab || !pattern.trim()}
-            className="control-button control-button--ghost"
+            className="control-button control-button--ghost toolbar-action-button"
             title="Find next (F3)"
           >
             ⌕
           </button>
 
           {activeTab?.isFiltered && (
-            <button onClick={clearFilter} className="control-button control-button--ghost">
-              X
+            <button onClick={clearFilter} className="control-button control-button--ghost toolbar-action-button" title="Clear filter (F8)">
+              ⌫
             </button>
           )}
         </div>
 
         <div className="toolbar-status-cluster">
           {activeTab && (
-            <button onClick={toggleTail} className={`status-pill status-pill--action ${tailMode ? 'status-pill--ok' : ''}`}>
-              {tailMode ? 'Tail' : 'Pause'}
+            <button onClick={toggleTail} className={`control-button control-button--ghost toolbar-action-button ${tailMode ? 'toolbar-action-button--active' : ''}`} title={tailMode ? 'Tail on' : 'Tail off'}>
+              {tailMode ? '⬇' : '⏸'}
             </button>
           )}
 
@@ -333,11 +338,7 @@ export function MainToolbar({ hub, onOpenPreferences, onLogout, onFilterApplied,
             </span>
           )}
 
-          <button onClick={onLogout} className="control-button control-button--ghost">
-            Out
-          </button>
-
-          <button onClick={onOpenPreferences} className="control-button control-button--ghost" title="Preferences">
+          <button onClick={onOpenPreferences} className="control-button control-button--ghost toolbar-action-button" title="Preferences">
             ⚙
           </button>
 

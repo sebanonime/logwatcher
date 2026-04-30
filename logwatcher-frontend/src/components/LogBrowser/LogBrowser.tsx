@@ -52,7 +52,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     loadRoot, loadSubfolder, setSubfoldersFilter, setFilesFilter,
   } = useBrowserStore()
 
-  const { addTab, removeTab } = useTabStore()
+  const { tabs, addTab, removeTab, setActive } = useTabStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
 
@@ -80,6 +80,15 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     const server = rootFolder?.servers.find(s => s.id === file.serverId)
       ?? rootFolder?.servers[0]
     if (!server) return
+
+    const existingTab = tabs.find(tab => tab.serverId === server.id && tab.filePath === file.path)
+    if (existingTab) {
+      const shouldOpenAnother = window.confirm(`'${basename(file.path)}' is already open. Open another tab?`)
+      if (!shouldOpenAnother) {
+        setActive(existingTab.sessionId)
+        return
+      }
+    }
 
     const hub = getLogHub()
     const sessionId = `${server.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -113,7 +122,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
       removeTab(sessionId)
       console.error('Failed to open log session', e)
     }
-  }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, addTab, removeTab])
+  }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, tabs, addTab, removeTab, setActive])
 
   const virtualRootFolder: RemoteFileInfoDto | null = rootFilesFolderPath && rootFiles.length > 0
     ? {
@@ -144,7 +153,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
       <div className="browser-content-split">
         <Group orientation="vertical" style={{ height: '100%' }}>
-          <Panel defaultSize={58} minSize={28}>
+          <Panel defaultSize={40} minSize={24}>
             <div className="browser-columns">
               <div className="browser-column browser-column--roots">
                 <div className="browser-stack-list">
@@ -219,7 +228,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
 
           <Separator className="browser-split-separator" />
 
-          <Panel defaultSize={42} minSize={22}>
+          <Panel defaultSize={60} minSize={28}>
             <div className="browser-files surface-panel">
               <div className="browser-files-header">
                 <div>
