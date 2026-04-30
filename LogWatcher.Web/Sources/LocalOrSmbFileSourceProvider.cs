@@ -41,19 +41,14 @@ namespace LogWatcher.Web.Sources
             string path, long fromByteOffset,
             [EnumeratorCancellation] CancellationToken ct)
         {
-            Console.WriteLine($"[LocalOrSmbFileSourceProvider.ReadRawAsync] Opening {path} from offset {fromByteOffset}");
             using var fs = OpenReadStream(path);
             fs.Position = fromByteOffset;
             var buffer = new byte[BufferSize];
             int read;
-            int chunkNum = 0;
             while ((read = await fs.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
             {
-                chunkNum++;
-                Console.WriteLine($"[LocalOrSmbFileSourceProvider.ReadRawAsync] Chunk {chunkNum}: {read} bytes");
                 yield return buffer.AsMemory(0, read);
             }
-            Console.WriteLine($"[LocalOrSmbFileSourceProvider.ReadRawAsync] Finished reading {path}: {chunkNum} chunks total");
         }
 
         public async Task<byte[]> ReadBytesAsync(string path, long from, int count, CancellationToken ct)

@@ -302,19 +302,31 @@ namespace LogWatcher.Web.Sessions
         }
 
         /// <summary>
-        /// Fast single-pass scan: streams the raw bytes, splits at newlines,
-        /// decodes and checks each line against hidden patterns.
-        /// Runs at ~500 MB/s (same speed as the indexing pass) instead of the
-        /// per-batch ReadLinesAsync approach that caused multi-second delays.
+        /// Fast single-pass scan: streams raw bytes, splits lines, decodes once,
+        /// then applies pattern + hidden rules. This avoids thousands of small
+        /// ReadLinesAsync calls and keeps filtering close to indexing speed.
         /// </summary>
-        private async Task<FilteredLineIndex> BuildHiddenFilterFromStreamAsync(
-            List<HiddenLinePattern> hiddenLines, CancellationToken ct)
+        private async Task<FilteredLineIndex> BuildFilterFromStreamAsync(
+            FilterOptionsDto options, CancellationToken ct, bool reportProgress)
         {
             var filter = new FilteredLineIndex();
-            var compiled = CompileHiddenPatterns(hiddenLines);
+            var hiddenRules = CompileHiddenPatterns((options.HiddenLines ?? new())
+                .Where(h => h != null)
+                .ToList());
+
+            Regex patternRegex = null;
+            var pattern = options.Pattern ?? string.Empty;
+            if (options.IsRegex)
+            {
+                var ropts = options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                patternRegex = new Regex(pattern, ropts | RegexOptions.Compiled);
+            }
+
+            int total = _index.Count;
+            var progress = _logHub.Clients.Group(SessionId);
+            int nextProgressLine = 50_000;
 
             var rawStream = _provider.ReadRawAsync(FilePath, 0, ct);
-
             int lineNumber = 0;
             // Reuse a byte buffer for the current line to avoid per-line heap allocations.
             var lineBytes = new byte[4096];
@@ -328,15 +340,27 @@ namespace LogWatcher.Web.Sessions
                     byte b = bytes[i];
                     if (b == (byte)'\n')
                     {
-                        // Strip trailing \r
                         int end = lineBytesLen;
                         if (end > 0 && lineBytes[end - 1] == (byte)'\r') end--;
 
                         var text = _encoding.GetString(lineBytes, 0, end);
-                        if (!IsHiddenByCompiledRules(text, compiled))
+                        bool matchesPattern = options.IsRegex
+                            ? patternRegex?.IsMatch(text) == true
+                            : options.CaseSensitive
+                                ? text.Contains(pattern)
+                                : text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+
+                        if (matchesPattern && !IsHiddenByCompiledRules(text, hiddenRules))
                             filter.Add(lineNumber);
 
                         lineNumber++;
+                        if (reportProgress && lineNumber >= nextProgressLine)
+                        {
+                            await progress.SendAsync("OnFilterProgress", SessionId,
+                                Math.Min(lineNumber, total), total, cancellationToken: ct);
+                            nextProgressLine += 50_000;
+                        }
+
                         lineBytesLen = 0;
                     }
                     else
@@ -354,12 +378,32 @@ namespace LogWatcher.Web.Sessions
                 int end = lineBytesLen;
                 if (end > 0 && lineBytes[end - 1] == (byte)'\r') end--;
                 var text = _encoding.GetString(lineBytes, 0, end);
-                if (!IsHiddenByCompiledRules(text, compiled))
+                bool matchesPattern = options.IsRegex
+                    ? patternRegex?.IsMatch(text) == true
+                    : options.CaseSensitive
+                        ? text.Contains(pattern)
+                        : text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+                if (matchesPattern && !IsHiddenByCompiledRules(text, hiddenRules))
                     filter.Add(lineNumber);
+            }
+
+            if (reportProgress)
+            {
+                await progress.SendAsync("OnFilterProgress", SessionId, total, total, cancellationToken: ct);
             }
 
             return filter;
         }
+
+        private Task<FilteredLineIndex> BuildHiddenFilterFromStreamAsync(
+            List<HiddenLinePattern> hiddenLines, CancellationToken ct)
+            => BuildFilterFromStreamAsync(new FilterOptionsDto
+            {
+                Pattern = string.Empty,
+                IsRegex = false,
+                CaseSensitive = false,
+                HiddenLines = hiddenLines,
+            }, ct, reportProgress: false);
 
         private record struct CompiledHiddenRule(string PlainText, bool CaseSensitive, Regex Pattern);
 
@@ -446,76 +490,8 @@ namespace LogWatcher.Web.Sessions
                     })
                     .ToList();
 
-                var newFilter = new FilteredLineIndex();
-                int total = _index.Count;
                 var progress = _logHub.Clients.Group(SessionId);
-
-                Regex patternRegex = null;
-                if (options.IsRegex)
-                {
-                    var ropts = options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                    patternRegex = new Regex(options.Pattern, ropts | RegexOptions.Compiled);
-                }
-
-                // Compile hidden line regex patterns
-                var hiddenPatterns = new List<Regex>();
-                foreach (var hidden in options.HiddenLines ?? new())
-                {
-                    if (!hidden.IsActive) continue;
-                    if (hidden.IsRegex)
-                    {
-                        var ropts = hidden.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                        hiddenPatterns.Add(new Regex(hidden.Text, ropts | RegexOptions.Compiled));
-                    }
-                }
-
-                for (int i = 0; i < total; i += 500)
-                {
-                    int batch = Math.Min(500, total - i);
-                    var lines = await ReadLinesAsync(i, batch, ct);
-                    foreach (var line in lines)
-                    {
-                        // Check if line matches filter pattern
-                        bool matchesPattern = options.IsRegex
-                            ? patternRegex?.IsMatch(line.Text) == true
-                            : options.CaseSensitive
-                                ? line.Text.Contains(options.Pattern)
-                                : line.Text.Contains(options.Pattern, StringComparison.OrdinalIgnoreCase);
-
-                        if (!matchesPattern) continue;
-
-                        // Check if line matches any hidden line pattern
-                        bool isHidden = false;
-                        int hiddenIndex = 0;
-                        foreach (var hidden in options.HiddenLines ?? new())
-                        {
-                            if (!hidden.IsActive)
-                            {
-                                if (hidden.IsRegex) hiddenIndex++;
-                                continue;
-                            }
-
-                            bool hiddenMatch = hidden.IsRegex
-                                ? hiddenPatterns[hiddenIndex]?.IsMatch(line.Text) == true
-                                : hidden.CaseSensitive
-                                    ? line.Text.Contains(hidden.Text)
-                                    : line.Text.Contains(hidden.Text, StringComparison.OrdinalIgnoreCase);
-
-                            if (hiddenMatch)
-                            {
-                                isHidden = true;
-                                break;
-                            }
-
-                            if (hidden.IsRegex) hiddenIndex++;
-                        }
-
-                        if (!isHidden)
-                            newFilter.Add(line.LineNumber);
-                    }
-                    if (i % 50000 == 0)
-                        await progress.SendAsync("OnFilterProgress", SessionId, i, total, cancellationToken: ct);
-                }
+                var newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
 
                 Volatile.Write(ref _filter, newFilter);
                 Interlocked.Increment(ref _viewVersion);

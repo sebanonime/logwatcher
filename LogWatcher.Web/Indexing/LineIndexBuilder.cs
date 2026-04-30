@@ -19,33 +19,22 @@ namespace LogWatcher.Web.Indexing
             // If starting fresh, seed line 0 at offset 0
             if (index.Count == 0)
             {
-                Console.WriteLine($"[LineIndexBuilder.BuildAsync] Seeding index with line 0 at offset 0");
                 index.AddOffset(0);
             }
 
             long absolutePosition = index.TotalBytes;
-            Console.WriteLine($"[LineIndexBuilder.BuildAsync] Starting from absolutePosition={absolutePosition}");
-            
-            int chunkCount = 0;
-            long totalBytesProcessed = 0;
 
             await foreach (var chunk in byteStream.WithCancellation(ct))
             {
-                chunkCount++;
                 // Scan the chunk synchronously (Span cannot be used in async context in C# 12)
                 var newlineOffsets = ScanNewlines(chunk, absolutePosition);
-                Console.WriteLine($"[LineIndexBuilder.BuildAsync] Chunk {chunkCount}: {chunk.Length} bytes, found {newlineOffsets.Count} newlines");
-                
                 foreach (var offset in newlineOffsets)
                     index.AddOffset(offset);
 
                 absolutePosition += chunk.Length;
-                totalBytesProcessed += chunk.Length;
                 index.TotalBytes = absolutePosition;
                 progress?.Report(absolutePosition);
             }
-            
-            Console.WriteLine($"[LineIndexBuilder.BuildAsync] Completed: {chunkCount} chunks, {totalBytesProcessed} bytes processed, index.Count={index.Count}, index.TotalBytes={index.TotalBytes}");
         }
 
         /// <summary>
