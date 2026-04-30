@@ -16,7 +16,8 @@ export function useVirtualLines(sessionId: string, hub: HubConnection) {
   const { getLine, buffers } = useLogStore()
   const { tabs, updateTab } = useTabStore()
   const tab = tabs.find(t => t.sessionId === sessionId)
-  const totalLines = tab?.totalLines ?? 0
+  const totalLines = tab?.contextTotalLines ?? tab?.totalLines ?? 0
+  const sourceOffset = tab?.contextStartLine ?? 0
 
   // Track in-flight requests to avoid duplicate fetches
   const inFlight = useRef<Set<number>>(new Set())
@@ -39,7 +40,8 @@ export function useVirtualLines(sessionId: string, hub: HubConnection) {
           const chunkEnd = Math.min(totalLines - 1, chunkStart + CHUNK_SIZE - 1)
           const chunkCount = chunkEnd - chunkStart + 1
 
-          hub.invoke('RequestLines', sessionId, chunkStart, chunkCount)
+          const sourceChunkStart = chunkStart + sourceOffset
+          hub.invoke('RequestLines', sessionId, sourceChunkStart, chunkCount)
             .then(() => updateTab(sessionId, { errorMessage: undefined }))
             .catch((e) => {
               const msg = e instanceof Error ? e.message : 'Failed to request lines from server'
@@ -51,7 +53,7 @@ export function useVirtualLines(sessionId: string, hub: HubConnection) {
         lineNum = chunkStart + CHUNK_SIZE - 1
       }
     }
-  }, [sessionId, totalLines, buffers, hub, updateTab])
+  }, [sessionId, totalLines, buffers, hub, updateTab, sourceOffset])
 
   const getLineText = useCallback((lineNumber: number): string | undefined => {
     return getLine(sessionId, lineNumber)

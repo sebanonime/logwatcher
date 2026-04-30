@@ -4,10 +4,11 @@ import { SelectedLinePanel } from './panels/SelectedLinePanel'
 
 interface SessionInspectorProps {
   onSelectPattern: (pattern: string) => void
+  onApplyPattern: (pattern: string) => void
   filterRefreshTick?: number
 }
 
-export function SessionInspector({ onSelectPattern, filterRefreshTick }: SessionInspectorProps) {
+export function SessionInspector({ onSelectPattern, onApplyPattern, filterRefreshTick }: SessionInspectorProps) {
   return (
     <div className="inspector-rail">
       <section className="surface-panel rail-section inspector-fill inspector-fill--primary">
@@ -15,7 +16,7 @@ export function SessionInspector({ onSelectPattern, filterRefreshTick }: Session
       </section>
 
       <section className="surface-panel rail-section inspector-fill inspector-fill--secondary">
-        <FilterHistoryPanel onSelectPattern={onSelectPattern} refreshTick={filterRefreshTick} />
+        <FilterHistoryPanel onSelectPattern={onSelectPattern} onApplyPattern={onApplyPattern} refreshTick={filterRefreshTick} />
       </section>
     </div>
   )

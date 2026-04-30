@@ -28,7 +28,19 @@ export function useLogHub() {
       if (typeof viewVersion === 'number' && typeof tab?.viewVersion === 'number' && viewVersion !== tab.viewVersion)
         return
 
-      addLinesAt(sessionId, startLine, lines)
+      if (typeof tab?.contextStartLine === 'number' && typeof tab?.contextTotalLines === 'number') {
+        const localStart = startLine - tab.contextStartLine
+        const localEnd = localStart + lines.length - 1
+        if (localEnd >= 0 && localStart < tab.contextTotalLines) {
+          const first = Math.max(0, -localStart)
+          const lastExclusive = Math.min(lines.length, tab.contextTotalLines - localStart)
+          const clipped = lines.slice(first, lastExclusive)
+          addLinesAt(sessionId, Math.max(0, localStart), clipped)
+        }
+      } else {
+        addLinesAt(sessionId, startLine, lines)
+      }
+
       if (typeof viewVersion === 'number') {
         updateTab(sessionId, { errorMessage: undefined, viewVersion })
       } else {
@@ -41,8 +53,12 @@ export function useLogHub() {
       if (typeof tab?.viewVersion === 'number' && tab.viewVersion !== stats.viewVersion)
         clearBuffer(sessionId)
 
+      const visibleTotal = typeof tab?.contextTotalLines === 'number'
+        ? tab.contextTotalLines
+        : stats.totalLines
+
       updateTab(sessionId, {
-        totalLines: stats.totalLines,
+        totalLines: visibleTotal,
         sizeBytes: stats.sizeBytes,
         isIndexed: stats.isIndexed,
         viewVersion: stats.viewVersion,

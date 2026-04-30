@@ -3,6 +3,7 @@ import type { HubConnection } from '@microsoft/signalr'
 import { LogVirtualList } from './LogVirtualList'
 import { LogStatusBar } from './LogStatusBar'
 import type { HighlightingRule } from '../../types'
+import { useLogStore } from '../../store/logStore'
 import { useTabStore } from '../../store/logStore'
 import { usePreferencesStore } from '../../store/preferencesStore'
 
@@ -13,7 +14,8 @@ interface LogViewerProps {
 }
 
 export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: LogViewerProps) {
-  const { tabs } = useTabStore()
+  const { tabs, updateTab } = useTabStore()
+  const { clearBuffer } = useLogStore()
   const defaultHighlights = usePreferencesStore(state => state.defaultHighlights)
   const tab = tabs.find(t => t.sessionId === sessionId)
 
@@ -30,6 +32,33 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
       {!tab?.isIndexed && indexProgress === null && (
         <div className="index-progress-bar index-progress-bar--indeterminate" />
       )}
+
+      {tab?.isFiltered && (
+        <div className="log-filter-banner">
+          <span className="log-filter-banner__label">
+            Filter: {tab.filterPattern ?? '(stored filter)'}
+          </span>
+          <button
+            className="log-filter-banner__clear"
+            onClick={async () => {
+              clearBuffer(sessionId)
+              updateTab(sessionId, {
+                totalLines: tab.contextTotalLines ?? 0,
+                isFiltered: false,
+                filterPattern: undefined,
+                filterIsRegex: undefined,
+                filterCaseSensitive: undefined,
+                activeStoredFilterName: undefined,
+              })
+              await hub.invoke('ClearFilter', sessionId)
+            }}
+            title="Cancel filter"
+          >
+            Cancel filter
+          </button>
+        </div>
+      )}
+
       <div className="log-viewer-body">
         <LogVirtualList
           sessionId={sessionId}

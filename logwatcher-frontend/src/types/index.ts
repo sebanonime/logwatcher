@@ -12,6 +12,11 @@ export interface FileStatsDto {
   viewVersion: number
 }
 
+export interface ContextLinesDto {
+  targetLineNumber: number
+  lines: LineDto[]
+}
+
 export interface FilterOptionsDto {
   pattern: string
   isRegex: boolean
@@ -120,7 +125,12 @@ export interface LogTab {
   newLinesCount: number
   tailMode: boolean
   isFiltered: boolean
+  filterPattern?: string
+  filterIsRegex?: boolean
+  filterCaseSensitive?: boolean
   viewVersion?: number
+  contextStartLine?: number
+  contextTotalLines?: number
   activeProfileName?: string
   activeStoredFilterName?: string
   errorMessage?: string

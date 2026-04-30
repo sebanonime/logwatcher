@@ -22,19 +22,22 @@ namespace LogWatcher.Web.Sessions
         private readonly ServerConfigRepository _servers;
         private readonly CredentialStore _credentials;
         private readonly IAgentRegistry _agentRegistry;
+        private readonly ProfileRepository _profiles;
 
         public WatchSessionManager(
             IHubContext<LogHub> logHub,
             IHubContext<AgentHub> agentHub,
             ServerConfigRepository servers,
             CredentialStore credentials,
-            IAgentRegistry agentRegistry)
+            IAgentRegistry agentRegistry,
+            ProfileRepository profiles)
         {
             _logHub = logHub;
             _agentHub = agentHub;
             _servers = servers;
             _credentials = credentials;
             _agentRegistry = agentRegistry;
+            _profiles = profiles;
         }
 
         public async Task OpenAsync(string sessionId, string serverId, string filePath,
@@ -106,6 +109,14 @@ namespace LogWatcher.Web.Sessions
                 await session.ClearFilterAsync();
         }
 
+        public async Task<ContextLinesDto> GetContextLinesAsync(string sessionId, int selectedLine, int radius)
+        {
+            if (!_sessions.TryGetValue(sessionId, out var session))
+                return new ContextLinesDto();
+
+            return await session.ReadContextLinesAsync(selectedLine, radius);
+        }
+
         public Task SetTailAsync(string sessionId, bool tail)
         {
             if (_sessions.TryGetValue(sessionId, out var session))
@@ -115,7 +126,28 @@ namespace LogWatcher.Web.Sessions
 
         public Task SetProfileAsync(string sessionId, string profileName)
         {
-            // Profile switching is a future enhancement — placeholder
+            if (!_sessions.TryGetValue(sessionId, out var session))
+                return Task.CompletedTask;
+
+            if (string.IsNullOrWhiteSpace(profileName))
+            {
+                session.SetHiddenLines(Array.Empty<HiddenLinePattern>());
+                return Task.CompletedTask;
+            }
+
+            var profile = _profiles.Get(profileName);
+            var hiddenLines = profile?.DicoHiddenLog
+                ?.Where(hidden => hidden != null)
+                .Select(hidden => new HiddenLinePattern
+                {
+                    Text = hidden.Text ?? string.Empty,
+                    IsRegex = hidden.IsRegex,
+                    CaseSensitive = hidden.CaseSensitive,
+                    IsActive = hidden.IsActif,
+                })
+                .ToList() ?? new List<HiddenLinePattern>();
+
+            session.SetHiddenLines(hiddenLines);
             return Task.CompletedTask;
         }
 

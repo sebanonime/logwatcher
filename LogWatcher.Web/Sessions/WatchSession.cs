@@ -27,6 +27,8 @@ namespace LogWatcher.Web.Sessions
         private volatile bool _filterEnabled;
         private volatile bool _isFilterBuilding;
         private int _viewVersion;
+        private List<HiddenLinePattern> _activeHiddenLines = new();
+        private volatile bool _isIndexComplete;
         private Encoding _encoding;
         private CancellationTokenSource _cts = new();
         private bool _tailMode = true;
@@ -82,12 +84,38 @@ namespace LogWatcher.Web.Sessions
                 await _builder.BuildAsync(_index, rawStream, progress, ct);
                 Console.WriteLine($"[WatchSession.RunAsync] BuildAsync completed. Index.Count={_index.Count}, TotalBytes={_index.TotalBytes}");
 
-                // 2. Notify the client that the index is ready
-                Console.WriteLine($"[WatchSession.RunAsync] Sending OnFileStats: TotalLines={_index.Count}, TotalBytes={_index.TotalBytes}");
+                // 2. Apply hidden-line filter sequentially (before pushing any lines)
+                //    so the initial view never shows hidden lines.
+                //    This scan is sequential with the index build — no I/O contention.
+                var hiddenLines = _activeHiddenLines;
+                if (hiddenLines.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
+                {
+                    await ApplyFilterAsync(new FilterOptionsDto
+                    {
+                        Pattern = string.Empty,
+                        IsRegex = false,
+                        CaseSensitive = false,
+                        HiddenLines = hiddenLines
+                            .Select(h => new HiddenLinePattern
+                            {
+                                Text = h.Text,
+                                IsRegex = h.IsRegex,
+                                CaseSensitive = h.CaseSensitive,
+                                IsActive = h.IsActive,
+                            })
+                            .ToList(),
+                    }, ct);
+                }
+
+                _isIndexComplete = true;
+
+                // 3. Notify the client that the index is ready
+                int visibleCount = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+                Console.WriteLine($"[WatchSession.RunAsync] Sending OnFileStats: TotalLines={visibleCount}, TotalBytes={_index.TotalBytes}");
                 await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                     new FileStatsDto
                     {
-                        TotalLines = _index.Count,
+                        TotalLines = visibleCount,
                         SizeBytes = _index.TotalBytes,
                         IsIndexed = true,
                         ServerId = ServerId,
@@ -95,16 +123,16 @@ namespace LogWatcher.Web.Sessions
                         ViewVersion = ViewVersion
                     });
 
-                // 2b. Push initial tail lines so client renders them immediately
+                // 3b. Push initial tail lines so client renders them immediately
                 //     without relying on the pull/RequestLines mechanism.
-                if (_index.Count > 0)
+                if (visibleCount > 0)
                 {
-                    int initialFrom = Math.Max(0, _index.Count - 500);
-                    int initialCount = _index.Count - initialFrom;
-                    var initialLines = await ReadLinesAsync(initialFrom, initialCount, ct);
+                    int initialFrom = Math.Max(0, visibleCount - 500);
+                    int initialCount = visibleCount - initialFrom;
+                    var initialLines = await ReadFilteredLinesAsync(initialFrom, initialCount, ct);
                     if (initialLines.Length > 0)
                         await SendToGroupAndOpeningClientAsync(
-                            "OnNewLines", SessionId, initialLines, _index.Count);
+                            "OnNewLines", SessionId, initialLines, visibleCount);
                 }
 
                 // 3. Tail new content
@@ -141,13 +169,19 @@ namespace LogWatcher.Web.Sessions
                     int newCount = _index.Count - prevCount;
                     if (newCount <= 0) continue;
 
-                    // Read the new lines and push to clients
-                    var newLines = await ReadLinesAsync(prevCount, newCount, ct);
-                    if (_tailMode)
+                    if (_tailMode && !_filterEnabled)
                     {
-                        await SendToGroupAndOpeningClientAsync(
-                            "OnNewLines", SessionId, newLines, _index.Count);
+                        // No active filter: push new lines directly, filtering hidden lines inline
+                        var newLines = await ReadLinesAsync(prevCount, newCount, ct);
+                        var hiddenRules = _activeHiddenLines;
+                        if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
+                            newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
+                        if (newLines.Length > 0)
+                            await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, newLines, _index.Count);
                     }
+                    // When a filter is active (hidden-only or user filter), let the client
+                    // pull new lines via RequestLines so they are correctly filtered/remapped.
+
                     // Always send updated stats so SizeBytes stays current
                     await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                         new FileStatsDto { TotalLines = _index.Count, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
@@ -245,12 +279,85 @@ namespace LogWatcher.Web.Sessions
             return results;
         }
 
+        public async Task<ContextLinesDto> ReadContextLinesAsync(int selectedLine, int radius, CancellationToken ct = default)
+        {
+            if (_index.Count == 0)
+                return new ContextLinesDto { TargetLineNumber = selectedLine, Lines = Array.Empty<LineDto>() };
+
+            int effectiveRadius = Math.Max(0, radius);
+            int targetOriginalLine = selectedLine;
+
+            if (_filterEnabled)
+            {
+                var filter = Volatile.Read(ref _filter);
+                if (filter != null && selectedLine >= 0 && selectedLine < filter.Count)
+                    targetOriginalLine = filter.GetOriginalLine(selectedLine);
+            }
+
+            targetOriginalLine = Math.Clamp(targetOriginalLine, 0, _index.Count - 1);
+
+            int startLine = Math.Max(0, targetOriginalLine - effectiveRadius);
+            int endLine = Math.Min(_index.Count - 1, targetOriginalLine + effectiveRadius);
+            int count = Math.Max(1, endLine - startLine + 1);
+
+            var lines = await ReadLinesAsync(startLine, count, ct);
+            var hiddenRules = _activeHiddenLines;
+            if (hiddenRules.Count > 0)
+                lines = lines.Where(line => !IsHiddenByRules(line.Text, hiddenRules)).ToArray();
+
+            return new ContextLinesDto
+            {
+                TargetLineNumber = targetOriginalLine,
+                Lines = lines,
+            };
+        }
+
+        private static bool IsHiddenByRules(string text, List<HiddenLinePattern> rules)
+        {
+            foreach (var hidden in rules)
+            {
+                if (!hidden.IsActive || string.IsNullOrEmpty(hidden.Text))
+                    continue;
+
+                if (hidden.IsRegex)
+                {
+                    var opts = hidden.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                    if (Regex.IsMatch(text, hidden.Text, opts))
+                        return true;
+                    continue;
+                }
+
+                if (hidden.CaseSensitive)
+                {
+                    if (text.Contains(hidden.Text))
+                        return true;
+                }
+                else if (text.Contains(hidden.Text, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public async Task ApplyFilterAsync(FilterOptionsDto options, CancellationToken ct = default)
         {
             _filterEnabled = true;
             _isFilterBuilding = true;
             try
             {
+                _activeHiddenLines = (options.HiddenLines ?? new())
+                    .Where(hidden => hidden != null)
+                    .Select(hidden => new HiddenLinePattern
+                    {
+                        Text = hidden.Text,
+                        IsRegex = hidden.IsRegex,
+                        CaseSensitive = hidden.CaseSensitive,
+                        IsActive = hidden.IsActive,
+                    })
+                    .ToList();
+
                 var newFilter = new FilteredLineIndex();
                 int total = _index.Count;
                 var progress = _logHub.Clients.Group(SessionId);
@@ -336,11 +443,53 @@ namespace LogWatcher.Web.Sessions
 
         public async Task ClearFilterAsync()
         {
+            if (_activeHiddenLines.Any(hidden => hidden.IsActive && !string.IsNullOrWhiteSpace(hidden.Text)))
+            {
+                await ApplyFilterAsync(new FilterOptionsDto
+                {
+                    Pattern = string.Empty,
+                    IsRegex = false,
+                    CaseSensitive = false,
+                    HiddenLines = _activeHiddenLines
+                        .Select(hidden => new HiddenLinePattern
+                        {
+                            Text = hidden.Text,
+                            IsRegex = hidden.IsRegex,
+                            CaseSensitive = hidden.CaseSensitive,
+                            IsActive = hidden.IsActive,
+                        })
+                        .ToList(),
+                });
+                return;
+            }
+
             _filterEnabled = false;
             Volatile.Write(ref _filter, null);
             Interlocked.Increment(ref _viewVersion);
             await _logHub.Clients.Group(SessionId).SendAsync("OnFileStats", SessionId,
                 new FileStatsDto { TotalLines = _index.Count, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+        }
+
+        public void SetHiddenLines(IEnumerable<HiddenLinePattern> hiddenLines)
+        {
+            var patterns = (hiddenLines ?? Enumerable.Empty<HiddenLinePattern>())
+                .Where(hidden => hidden != null)
+                .Select(hidden => new HiddenLinePattern
+                {
+                    Text = hidden.Text,
+                    IsRegex = hidden.IsRegex,
+                    CaseSensitive = hidden.CaseSensitive,
+                    IsActive = hidden.IsActive,
+                })
+                .ToList();
+            _activeHiddenLines = patterns;
+
+            // If the index is already complete (profile changed after initial load),
+            // apply the hidden filter in the background so hidden lines disappear.
+            if (_isIndexComplete)
+            {
+                _ = ClearFilterAsync();
+            }
         }
 
         public void SetTail(bool tail) => _tailMode = tail;

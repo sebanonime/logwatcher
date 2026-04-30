@@ -56,6 +56,12 @@ namespace LogWatcher.Web.Dto
         public int InitialLines { get; set; } = 500;
     }
 
+    public class ContextLinesDto
+    {
+        public int TargetLineNumber { get; set; }
+        public LineDto[] Lines { get; set; } = Array.Empty<LineDto>();
+    }
+
     public class RemoteFileInfoDto
     {
         public string Path { get; set; }

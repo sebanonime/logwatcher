@@ -4,11 +4,13 @@ import { useFilterHistory } from '../../hooks/useFilterHistory'
 interface FilterHistoryPanelProps {
   /** Called when user clicks a history entry — populate filter input */
   onSelectPattern: (pattern: string) => void
+  /** Called when user double-clicks a history entry — populate + apply filter */
+  onApplyPattern: (pattern: string) => void
   /** Increment this to force a re-read of localStorage after filter applied */
   refreshTick?: number
 }
 
-export function FilterHistoryPanel({ onSelectPattern, refreshTick }: FilterHistoryPanelProps) {
+export function FilterHistoryPanel({ onSelectPattern, onApplyPattern, refreshTick }: FilterHistoryPanelProps) {
   const { getHistory, clear } = useFilterHistory()
   const [history, setHistory] = useState<string[]>([])
 
@@ -40,6 +42,7 @@ export function FilterHistoryPanel({ onSelectPattern, refreshTick }: FilterHisto
           <button
             key={i}
             onClick={() => onSelectPattern(pattern)}
+            onDoubleClick={() => onApplyPattern(pattern)}
             className="history-chip"
             title={pattern}
           >

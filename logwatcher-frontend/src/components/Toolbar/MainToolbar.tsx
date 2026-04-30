@@ -1,27 +1,42 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { HubConnection } from '@microsoft/signalr'
 import { useTabStore } from '../../store/logStore'
 import { useFilterHistory } from '../../hooks/useFilterHistory'
-import type { FilterOptionsDto } from '../../types'
+import type { ContextLinesDto, FilterOptionsDto, LineDto } from '../../types'
 import { useLogStore } from '../../store/logStore'
 import { usePreferencesStore } from '../../store/preferencesStore'
+import { useHighlighting } from '../../hooks/useHighlighting'
+import { startLogHub } from '../../signalr/logHubConnection'
 
 interface MainToolbarProps {
   hub: HubConnection
   onOpenPreferences: () => void
   onFilterApplied?: () => void
   pendingPattern?: string | null
+  pendingApplyRequest?: { id: number; pattern: string } | null
   onPendingPatternConsumed?: () => void
+  onPendingApplyRequestConsumed?: () => void
 }
 
 /**
  * Top toolbar: profile + filter controls for the active log tab + tail toggle.
  */
-export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPattern, onPendingPatternConsumed }: MainToolbarProps) {
+export function MainToolbar({
+  hub,
+  onOpenPreferences,
+  onFilterApplied,
+  pendingPattern,
+  pendingApplyRequest,
+  onPendingPatternConsumed,
+  onPendingApplyRequestConsumed,
+}: MainToolbarProps) {
   const { tabs, activeSessionId, updateTab, setActive } = useTabStore()
-  const { setSelectedLine, getLine, clearBuffer } = useLogStore()
+  const { setSelectedLine, getSelectedLine, getLine, clearBuffer } = useLogStore()
   const profiles = usePreferencesStore(state => state.profiles)
+  const defaultHighlights = usePreferencesStore(state => state.defaultHighlights)
   const { addEntry } = useFilterHistory()
+  const processedApplyRequestRef = useRef<number | null>(null)
 
   const activeTab = tabs.find(t => t.sessionId === activeSessionId)
   const activeProfile = useMemo(
@@ -33,9 +48,13 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     [activeProfile, activeTab?.activeStoredFilterName]
   )
   const tailMode = activeTab?.tailMode ?? true
+  const selectedLine = activeSessionId ? getSelectedLine(activeSessionId) : null
+  const activeHighlightRules = activeProfile?.dicoHighLighting ?? []
+  const { highlightLine } = useHighlighting(activeHighlightRules, defaultHighlights)
 
   const [pattern, setPattern] = useState('')
   const [isFiltering, setIsFiltering] = useState(false)
+  const [contextModal, setContextModal] = useState<{ lines: LineDto[]; targetLineNumber: number } | null>(null)
   const buildId = __APP_BUILD__
 
   // Reset filter state when active tab changes
@@ -58,6 +77,60 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     }
   }, [pendingPattern, onPendingPatternConsumed])
 
+  useEffect(() => {
+    if (!pendingApplyRequest || !activeSessionId) return
+    if (processedApplyRequestRef.current === pendingApplyRequest.id) return
+    processedApplyRequestRef.current = pendingApplyRequest.id
+
+    const applyFromHistory = async () => {
+      const nextPattern = pendingApplyRequest.pattern.trim()
+      setPattern(pendingApplyRequest.pattern)
+      if (!nextPattern) return
+
+      const filter: FilterOptionsDto = {
+        pattern: nextPattern,
+        isRegex: true,
+        caseSensitive: false,
+        hiddenLines: (activeProfile?.dicoHiddenLog ?? []).map(h => ({
+          text: h.text,
+          isRegex: h.isRegex,
+          caseSensitive: h.caseSensitive,
+          isActive: h.isActif,
+        })),
+      }
+
+      setIsFiltering(true)
+      clearBuffer(activeSessionId)
+      updateTab(activeSessionId, { totalLines: 0 })
+      try {
+        addEntry(nextPattern)
+        await hub.invoke('SetFilter', activeSessionId, filter)
+        clearBuffer(activeSessionId)
+        updateTab(activeSessionId, {
+          isFiltered: true,
+          filterPattern: nextPattern,
+          filterIsRegex: true,
+          filterCaseSensitive: false,
+        })
+        onFilterApplied?.()
+      } finally {
+        setIsFiltering(false)
+      }
+    }
+
+    void applyFromHistory()
+    onPendingApplyRequestConsumed?.()
+  }, [pendingApplyRequest, activeSessionId, activeProfile, clearBuffer, updateTab, addEntry, hub, onFilterApplied, onPendingApplyRequestConsumed])
+
+  useEffect(() => {
+    if (!contextModal) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextModal(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [contextModal])
+
   const applyStoredFilterNow = useCallback(async (storedFilterName?: string) => {
     if (!activeSessionId || !activeProfile) return
     const selectedFilter = activeProfile.dicoStoredFilter.find(filter => filter.name === storedFilterName)
@@ -69,7 +142,13 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     if (!selectedFilter?.filter?.trim()) {
       await hub.invoke('ClearFilter', activeSessionId)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
+      updateTab(activeSessionId, {
+        isFiltered: false,
+        activeStoredFilterName: undefined,
+        filterPattern: undefined,
+        filterIsRegex: undefined,
+        filterCaseSensitive: undefined,
+      })
       return
     }
 
@@ -90,7 +169,12 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
       addEntry(selectedFilter.filter.trim())
       await hub.invoke('SetFilter', activeSessionId, filter)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { isFiltered: true })
+      updateTab(activeSessionId, {
+        isFiltered: true,
+        filterPattern: selectedFilter.filter,
+        filterIsRegex: selectedFilter.isRegex,
+        filterCaseSensitive: selectedFilter.caseSensitive,
+      })
       onFilterApplied?.()
     } finally {
       setIsFiltering(false)
@@ -104,7 +188,13 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
       updateTab(activeSessionId, { totalLines: 0 })
       await hub.invoke('ClearFilter', activeSessionId)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
+      updateTab(activeSessionId, {
+        isFiltered: false,
+        activeStoredFilterName: undefined,
+        filterPattern: undefined,
+        filterIsRegex: undefined,
+        filterCaseSensitive: undefined,
+      })
       return
     }
 
@@ -139,7 +229,12 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     // Drop any late OnLines responses from pre-filter requests.
     clearBuffer(activeSessionId)
 
-    updateTab(activeSessionId, { isFiltered: true })
+    updateTab(activeSessionId, {
+      isFiltered: true,
+      filterPattern: filterPayload.pattern,
+      filterIsRegex: filterPayload.isRegex,
+      filterCaseSensitive: filterPayload.caseSensitive,
+    })
     setIsFiltering(false)
     onFilterApplied?.()
   }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer])
@@ -151,7 +246,13 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     updateTab(activeSessionId, { totalLines: 0 })
     await hub.invoke('ClearFilter', activeSessionId)
     clearBuffer(activeSessionId)
-    updateTab(activeSessionId, { isFiltered: false, activeStoredFilterName: undefined })
+    updateTab(activeSessionId, {
+      isFiltered: false,
+      activeStoredFilterName: undefined,
+      filterPattern: undefined,
+      filterIsRegex: undefined,
+      filterCaseSensitive: undefined,
+    })
   }, [hub, activeSessionId, updateTab, clearBuffer])
 
   const toggleTail = useCallback(async () => {
@@ -160,6 +261,90 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
     await hub.invoke('SetTail', activeSessionId, next)
     updateTab(activeSessionId, { tailMode: next })
   }, [hub, activeSessionId, tailMode, updateTab])
+
+  const showContext = useCallback(async () => {
+    if (!activeSessionId || !activeTab) return
+    const selected = useLogStore.getState().getSelectedLine(activeSessionId)
+    if (!selected) return
+
+    const context = await hub.invoke<ContextLinesDto>('GetContextLines', activeSessionId, selected.lineNumber, 70)
+    setContextModal({
+      lines: context.lines ?? [],
+      targetLineNumber: context.targetLineNumber,
+    })
+  }, [hub, activeSessionId, activeTab])
+
+  const openLineInNewTab = useCallback(async () => {
+    if (!activeSessionId || !activeTab) return
+    const selected = useLogStore.getState().getSelectedLine(activeSessionId)
+    if (!selected) return
+
+    const profile = profiles.find(p => p.name === activeTab.activeProfileName)
+    const nextSessionId = `${activeTab.serverId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const contextStart = Math.max(0, selected.lineNumber - 50)
+    const contextEnd = Math.min(activeTab.totalLines - 1, selected.lineNumber + 50)
+    const contextCount = Math.max(1, contextEnd - contextStart + 1)
+
+    updateTab(activeSessionId, { tailMode: false })
+    await hub.invoke('SetTail', activeSessionId, false)
+
+    useTabStore.getState().addTab({
+      sessionId: nextSessionId,
+      serverId: activeTab.serverId,
+      filePath: activeTab.filePath,
+      displayName: `${activeTab.displayName} [${contextStart + 1}..${contextEnd + 1}]`,
+      serverName: activeTab.serverName,
+      totalLines: contextCount,
+      sizeBytes: 0,
+      isIndexed: false,
+      newLinesCount: 0,
+      tailMode: false,
+      isFiltered: activeTab.isFiltered,
+      filterPattern: activeTab.filterPattern,
+      filterIsRegex: activeTab.filterIsRegex,
+      filterCaseSensitive: activeTab.filterCaseSensitive,
+      contextStartLine: contextStart,
+      contextTotalLines: contextCount,
+      activeProfileName: activeTab.activeProfileName,
+      activeStoredFilterName: undefined,
+    })
+
+    try {
+      await startLogHub()
+      await hub.invoke('OpenLog', nextSessionId, activeTab.serverId, activeTab.filePath, {
+        loadFromEnd: true,
+        initialLines: 500,
+        profileName: profile?.name,
+        encoding: profile?.encoding,
+      })
+
+      if (profile?.name) {
+        await hub.invoke('SetProfile', nextSessionId, profile.name)
+      }
+
+      if (activeTab.isFiltered && activeTab.filterPattern) {
+        await hub.invoke('SetFilter', nextSessionId, {
+          pattern: activeTab.filterPattern,
+          isRegex: activeTab.filterIsRegex ?? true,
+          caseSensitive: activeTab.filterCaseSensitive ?? false,
+          hiddenLines: (profile?.dicoHiddenLog ?? []).map(h => ({
+            text: h.text,
+            isRegex: h.isRegex,
+            caseSensitive: h.caseSensitive,
+            isActive: h.isActif,
+          })),
+        })
+      }
+
+      await hub.invoke('SetTail', nextSessionId, false)
+      await hub.invoke('RequestLines', nextSessionId, contextStart, contextCount)
+      useTabStore.getState().updateTab(nextSessionId, { totalLines: contextCount })
+      setSelectedLine(nextSessionId, { lineNumber: selected.lineNumber, text: selected.text })
+      setActive(nextSessionId)
+    } catch {
+      useTabStore.getState().removeTab(nextSessionId)
+    }
+  }, [hub, activeSessionId, activeTab, profiles, updateTab, setSelectedLine, setActive])
 
   const searchNext = useCallback(async () => {
     if (!activeTab || !activeSessionId) return
@@ -225,12 +410,17 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
       if (event.key === 'F8' && activeTab?.isFiltered) {
         event.preventDefault()
         void clearFilter()
+        return
+      }
+      if (event.ctrlKey && (event.key === 'r' || event.key === 'R')) {
+        event.preventDefault()
+        void showContext()
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [searchNext, clearFilter, activeTab?.isFiltered])
+  }, [searchNext, clearFilter, showContext, activeTab?.isFiltered])
 
   return (
     <header className="chrome-bar">
@@ -256,7 +446,12 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
                 updateTab(activeSessionId, { totalLines: 0 })
                 await hub.invoke('ClearFilter', activeSessionId)
                 clearBuffer(activeSessionId)
-                updateTab(activeSessionId, { isFiltered: false })
+                updateTab(activeSessionId, {
+                  isFiltered: false,
+                  filterPattern: undefined,
+                  filterIsRegex: undefined,
+                  filterCaseSensitive: undefined,
+                })
                 try {
                   await hub.invoke('SetProfile', activeSessionId, nextProfileName ?? '')
                 } catch {
@@ -327,6 +522,18 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
 
         <div className="toolbar-status-cluster">
           {activeTab && (
+            <button onClick={showContext} className="control-button control-button--ghost toolbar-action-button" title="Show context (Ctrl+R)">
+              ☰
+            </button>
+          )}
+
+          {activeTab && (
+            <button onClick={openLineInNewTab} disabled={!selectedLine} className="control-button control-button--ghost toolbar-action-button" title="Open selected line in new tab">
+              ⧉
+            </button>
+          )}
+
+          {activeTab && (
             <button onClick={toggleTail} className={`control-button control-button--ghost toolbar-action-button ${tailMode ? 'toolbar-action-button--active' : ''}`} title={tailMode ? 'Tail on' : 'Tail off'}>
               {tailMode ? '⬇' : '⏸'}
             </button>
@@ -347,6 +554,44 @@ export function MainToolbar({ hub, onOpenPreferences, onFilterApplied, pendingPa
           </span>
         </div>
       </div>
+
+      {contextModal && createPortal(
+        <div className="context-modal-overlay" onClick={() => setContextModal(null)}>
+          <div className="context-modal" onClick={event => event.stopPropagation()}>
+            <div className="context-modal__header">
+              <div className="context-modal__title">Context View</div>
+              <button className="control-button control-button--ghost context-modal__close" onClick={() => setContextModal(null)}>
+                ×
+              </button>
+            </div>
+            <div className="context-modal__body">
+              {contextModal.lines.map(line => {
+                const isTarget = line.lineNumber === contextModal.targetLineNumber
+                const segments = highlightLine(line.text)
+                return (
+                  <div key={line.lineNumber} className={`context-modal__line ${isTarget ? 'context-modal__line--target' : ''}`}>
+                    <span className="context-modal__line-text">
+                      {segments.map((seg, index) => (
+                        <span
+                          key={index}
+                          style={{
+                            color: seg.foreColor,
+                            backgroundColor: seg.backColor,
+                            fontWeight: seg.bold ? 'bold' : undefined,
+                          }}
+                        >
+                          {seg.text}
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </header>
   )
 }

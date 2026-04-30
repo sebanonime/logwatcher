@@ -222,9 +222,10 @@ select {
 }
 
 .toolbar-action-button--active {
-  color: white;
-  background: linear-gradient(135deg, var(--accent-2), var(--accent));
-  border-color: transparent;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f4f86, #0a3a67);
+  border-color: #184f79;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
 .control-button:hover,
@@ -476,9 +477,11 @@ select {
 }
 
 .rail-scroll {
+  flex: 1 1 auto;
   width: 100%;
   align-self: stretch;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .browser-filter-row,
@@ -681,10 +684,39 @@ select {
 }
 
 .tab-strip__toggle {
-  min-width: 88px;
+  min-width: 22px;
   min-height: 24px;
-  padding: 0 8px;
+  padding: 0 4px;
   flex-shrink: 0;
+}
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 168px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tab-context-menu__item {
+  text-align: left;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 11px;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+
+.tab-context-menu__item:hover {
+  background: rgba(124, 183, 255, 0.15);
 }
 
 .dock-area {
@@ -719,6 +751,39 @@ select {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.log-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(255, 184, 0, 0.16);
+  color: var(--text-1);
+  font-size: 11px;
+}
+
+.log-filter-banner__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-filter-banner__clear {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--text-1);
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.log-filter-banner__clear:hover {
+  border-color: var(--border-strong);
 }
 
 .index-progress-bar {
@@ -896,6 +961,7 @@ select {
 .inspector-fill {
   flex: 1 1 0;
   display: flex;
+  min-width: 0;
 }
 
 .inspector-fill--primary {
@@ -922,6 +988,37 @@ select {
   gap: 3px;
   min-height: 0;
   height: 100%;
+  width: 100%;
+}
+
+.inspect-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.inspect-search-input {
+  width: min(230px, 100%);
+  min-height: 24px;
+  padding: 2px 6px;
+}
+
+.inspect-search-next {
+  min-width: 56px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.inspect-match {
+  background: rgba(255, 232, 109, 0.45);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.inspect-match--active {
+  background: rgba(255, 184, 0, 0.75);
 }
 
 .metric-grid {
@@ -1019,6 +1116,69 @@ select {
   backdrop-filter: blur(8px);
   z-index: 90;
   padding: 12px;
+}
+
+.context-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 7, 16, 0.62);
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.context-modal {
+  width: min(1100px, 92vw);
+  max-height: 82vh;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.context-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.context-modal__title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.context-modal__close {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+}
+
+.context-modal__body {
+  overflow-y: auto;
+  max-height: 70vh;
+  padding: 6px 0;
+  font-family: var(--user-font-family), var(--font-mono);
+  font-size: var(--user-font-size);
+}
+
+.context-modal__line {
+  display: block;
+  padding: 1px 10px;
+}
+
+.context-modal__line--target {
+  background: rgba(124, 183, 255, 0.22);
+}
+
+.context-modal__line-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .settings-screen {

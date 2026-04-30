@@ -66,6 +66,9 @@ namespace LogWatcher.Web.Hubs
         public Task SetProfile(string sessionId, string profileName)
             => _sessions.SetProfileAsync(sessionId, profileName);
 
+        public Task<ContextLinesDto> GetContextLines(string sessionId, int selectedLine, int radius)
+            => _sessions.GetContextLinesAsync(sessionId, selectedLine, radius);
+
         /// <summary>
         /// <summary>
         /// Returns a merged directory listing from all servers in the given root folder.

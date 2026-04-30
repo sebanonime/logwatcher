@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLogStore, useTabStore } from '../../store/logStore'
 
 function extractBalancedJsonCandidate(text: string, start: number): { end: number; raw: string } | null {
@@ -137,18 +137,97 @@ function formatForInspect(text: string): string {
   return splitHumanSeparators(withXml)
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export function SelectedLinePanel() {
   const { activeSessionId } = useTabStore()
   const { getSelectedLine } = useLogStore()
+  const [search, setSearch] = useState('')
+  const [activeMatch, setActiveMatch] = useState(0)
+  const activeMatchRef = useRef<HTMLElement | null>(null)
 
   const line = activeSessionId ? getSelectedLine(activeSessionId) : null
   const formatted = line ? formatForInspect(line.text) : null
+
+  const searchRegex = useMemo(() => {
+    if (!search.trim()) return null
+    return new RegExp(`(${escapeRegExp(search.trim())})`, 'gi')
+  }, [search])
+
+  const matchCount = useMemo(() => {
+    if (!formatted || !searchRegex) return 0
+    const matches = formatted.match(searchRegex)
+    return matches?.length ?? 0
+  }, [formatted, searchRegex])
+
+  useEffect(() => {
+    setActiveMatch(0)
+    setSearch('')
+  }, [line?.lineNumber])
+
+  useEffect(() => {
+    activeMatchRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [activeMatch, formatted])
+
+  const renderedContent = useMemo(() => {
+    if (!formatted) return null
+    if (!searchRegex) return formatted
+
+    const parts = formatted.split(searchRegex)
+    let currentMatch = -1
+
+    return parts.map((part, index) => {
+      if (!part) return null
+      if (index % 2 === 1) {
+        currentMatch++
+        const isActive = currentMatch === activeMatch
+        return (
+          <mark
+            key={`m-${index}`}
+            className={`inspect-match ${isActive ? 'inspect-match--active' : ''}`}
+            ref={element => {
+              if (isActive) activeMatchRef.current = element
+            }}
+          >
+            {part}
+          </mark>
+        )
+      }
+      return <React.Fragment key={`t-${index}`}>{part}</React.Fragment>
+    })
+  }, [formatted, searchRegex, activeMatch])
+
+  const goNextMatch = () => {
+    if (matchCount <= 0) return
+    setActiveMatch(previous => (previous + 1) % matchCount)
+  }
 
   return (
     <div className="rail-panel-content">
       <div className="section-header-row">
         <div>
           <div className="eyebrow">Inspect</div>
+        </div>
+        <div className="inspect-search-row">
+          <input
+            className="control-input inspect-search-input"
+            placeholder="Search in details..."
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === 'F3') {
+                event.preventDefault()
+                goNextMatch()
+              }
+            }}
+          />
+          {matchCount > 0 && (
+            <button className="control-button control-button--ghost inspect-search-next" onClick={goNextMatch} title="Next match">
+              {activeMatch + 1}/{matchCount}
+            </button>
+          )}
         </div>
       </div>
       <div className="rail-scroll">
@@ -157,7 +236,7 @@ export function SelectedLinePanel() {
         )}
         {line && (
           <pre className="selected-line-content">
-            {formatted}
+            {renderedContent}
           </pre>
         )}
       </div>

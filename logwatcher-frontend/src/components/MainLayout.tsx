@@ -16,6 +16,7 @@ interface MainLayoutProps {
 export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }: MainLayoutProps) {
   const [filterRefreshTick, setFilterRefreshTick] = useState(0)
   const [pendingPattern, setPendingPattern] = useState<string | null>(null)
+  const [pendingApplyRequest, setPendingApplyRequest] = useState<{ id: number; pattern: string } | null>(null)
   const [isBrowserVisible, setIsBrowserVisible] = useState(true)
   const [isInspectorVisible, setIsInspectorVisible] = useState(true)
   const { theme, fontFamily, fontSize } = useUiStore()
@@ -34,6 +35,11 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
     setPendingPattern(pattern)
   }, [])
 
+  const handleApplyHistoryPattern = useCallback((pattern: string) => {
+    setPendingPattern(pattern)
+    setPendingApplyRequest({ id: Date.now(), pattern })
+  }, [])
+
   const toggleBrowserPanel = useCallback(() => {
     setIsBrowserVisible(v => !v)
   }, [])
@@ -49,7 +55,9 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
         onOpenPreferences={onOpenPreferences}
         onFilterApplied={handleFilterApplied}
         pendingPattern={pendingPattern}
+        pendingApplyRequest={pendingApplyRequest}
         onPendingPatternConsumed={() => setPendingPattern(null)}
+        onPendingApplyRequestConsumed={() => setPendingApplyRequest(null)}
       />
 
       <div className="workspace-body">
@@ -64,7 +72,16 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
           )}
 
           {isBrowserVisible && (
-            <Separator className="workspace-separator workspace-separator--vertical" />
+            <Separator className="workspace-separator workspace-separator--vertical">
+              <button
+                onClick={toggleBrowserPanel}
+                className="separator-toggle separator-toggle--left"
+                title="Hide browser"
+                aria-label="Hide browser"
+              >
+                <span aria-hidden>◂</span>
+              </button>
+            </Separator>
           )}
 
           <Panel defaultSize={isBrowserVisible || isInspectorVisible ? 52 : 100} minSize={20}>
@@ -81,12 +98,19 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
                   </button>
                 )}
 
+                {!isBrowserVisible && (
+                  <button
+                    onClick={toggleBrowserPanel}
+                    className="edge-toggle edge-toggle--left"
+                    title="Show browser"
+                    aria-label="Show browser"
+                  >
+                    <span aria-hidden>▸</span>
+                  </button>
+                )}
+
                 <div style={{ height: '100%', minHeight: 0 }}>
-                  <DockArea
-                    hub={hub}
-                    isBrowserVisible={isBrowserVisible}
-                    onToggleBrowser={toggleBrowserPanel}
-                  />
+                  <DockArea hub={hub} />
                 </div>
               </div>
             </div>
@@ -110,6 +134,7 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
               <div className="workspace-panel workspace-panel--inspector">
                 <SessionInspector
                   onSelectPattern={handleSelectHistoryPattern}
+                  onApplyPattern={handleApplyHistoryPattern}
                   filterRefreshTick={filterRefreshTick}
                 />
               </div>
