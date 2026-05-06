@@ -145,7 +145,7 @@ public class AgentHubConnection : IAsyncDisposable
                 foreach (var f in Directory.GetFiles(directory))
                     entries.Add(new { Name = Path.GetFileName(f), Path = f, IsDirectory = false, Size = new FileInfo(f).Length });
                 foreach (var d in Directory.GetDirectories(directory))
-                    entries.Add(new { Name = Path.GetFileName(d), Path = d, IsDirectory = true, Size = 0L });
+                    entries.Add(new { Name = Path.GetFileName(d), Path = d, IsDirectory = true, Size = 0L, HasChildren = Directory.EnumerateFileSystemEntries(d).Any() });
             }
 
             if (_conn?.State == HubConnectionState.Connected)

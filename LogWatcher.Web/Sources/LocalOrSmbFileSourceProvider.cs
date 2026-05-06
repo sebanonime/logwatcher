@@ -145,7 +145,8 @@ namespace LogWatcher.Web.Sources
                     Path = f.FullName,
                     IsDirectory = f is DirectoryInfo,
                     SizeBytes = f is FileInfo fi ? fi.Length : 0,
-                    LastModified = f.LastWriteTimeUtc
+                    LastModified = f.LastWriteTimeUtc,
+                    HasChildren = f is DirectoryInfo d && d.EnumerateFileSystemInfos().Any()
                 });
 
             return Task.FromResult(files);

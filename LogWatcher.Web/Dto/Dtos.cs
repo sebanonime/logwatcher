@@ -69,5 +69,9 @@ namespace LogWatcher.Web.Dto
         public DateTimeOffset LastModified { get; set; }
         public bool IsDirectory { get; set; }
         public string ServerId { get; set; }
+        /// <summary>For directories: true if the directory contains at least one child entry.</summary>
+        public bool HasChildren { get; set; }
+        /// <summary>Human-readable name of the server/source this item comes from.</summary>
+        public string SourceName { get; set; }
     }
 }

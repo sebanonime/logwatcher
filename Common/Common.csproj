@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net48;net8.0</TargetFrameworks>
+    <TargetFrameworks>net48;net8.0;net10.0</TargetFrameworks>
     <RootNamespace>LogWatcher.Common</RootNamespace>
     <AssemblyName>LogWatcher.Common</AssemblyName>
     <LangVersion>latest</LangVersion>
@@ -22,8 +22,8 @@
     </Reference>
   </ItemGroup>
 
-  <!-- net8.0: exclude WinForms-only and BinaryFormatter-dependent files -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+  <!-- net8.0 / net10.0: exclude WinForms-only and BinaryFormatter-dependent files -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
     <Compile Remove="BasePlugin.cs" />
     <Compile Remove="PluginDocContent.cs" />
     <Compile Remove="SortableBindingList.cs" />

@@ -98,9 +98,12 @@ namespace LogWatcher.Web.Hubs
                         : Path.Combine(basePath, subpath).Replace('\\', '/');
 
                     var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
-                    // Set the server ID on each item so the frontend knows which server to use
+                    // Set the server ID and source name on each item
                     foreach (var item in items)
+                    {
                         item.ServerId = server.Id;
+                        item.SourceName = server.Name;
+                    }
                     results.AddRange(items);
                 }
                 catch { /* skip unreachable servers */ }
@@ -110,10 +113,19 @@ namespace LogWatcher.Web.Hubs
                 }
             }
 
-            // Deduplicate by name (keep first occurrence — matches highest-priority server)
-            return results
+            // Directories: keep all non-empty (from all servers — no dedup, to allow showing same-named
+            // folders from different sources). Files: deduplicate by name (keep first = highest-priority server).
+            var dirs = results
+                .Where(f => f.IsDirectory && f.HasChildren)
+                .ToList();
+
+            var files = results
+                .Where(f => !f.IsDirectory)
                 .GroupBy(f => Path.GetFileName(f.Path), StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
+                .ToList();
+
+            return dirs.Concat(files)
                 .OrderBy(f => !f.IsDirectory)  // directories first
                 .ThenBy(f => Path.GetFileName(f.Path), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

@@ -131,6 +131,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
         sizeBytes: 0,
         lastModified: rootFiles[0]?.lastModified ?? new Date().toISOString(),
         serverId: rootFiles[0]?.serverId ?? '',
+        hasChildren: true,
       }
     : null
 
@@ -139,6 +140,16 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const filteredSubfolders = displayedSubfolders.filter(f =>
     basename(f.path).toLowerCase().includes(subfoldersFilter.toLowerCase())
   )
+
+  // Detect basenames that appear more than once so we can show a disambiguation hint.
+  // Use displayedSubfolders (not filtered) so the hint still shows even when the filter
+  // hides the other duplicate.
+  const subfoldersBasenameCounts = displayedSubfolders.reduce<Record<string, number>>((acc, f) => {
+    const name = basename(f.path)
+    acc[name] = (acc[name] ?? 0) + 1
+    return acc
+  }, {})
+
   const filteredFiles = files.filter(f =>
     basename(f.path).toLowerCase().includes(filesFilter.toLowerCase())
   )
@@ -210,14 +221,23 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                   )}
                   {filteredSubfolders.map(f => {
                     const name = basename(f.path)
+                    const isDuplicate = (subfoldersBasenameCounts[name] ?? 0) > 1
+                    // Hint priority: SourceName (server Name from backend) → parent folder basename → nothing
+                    const parentName = basename(f.path.replace(/[/\\][^/\\]+$/, ''))
+                    const hint = isDuplicate ? (f.sourceName || parentName || null) : null
                     return (
                       <button
-                        key={f.path}
+                        key={`${f.serverId}:${f.path}`}
                         onClick={() => handleSelectSubfolder(f)}
                         className={`browser-item browser-item--block ${selectedSubfolder === f.path ? 'browser-item--active' : ''}`}
                         title={f.path}
                       >
                         <span className="browser-item-title">{name}</span>
+                        {hint && (
+                          <span style={{ color: 'var(--color-text-muted, #888)', marginLeft: '0.4em', fontSize: '0.85em' }}>
+                            ({hint})
+                          </span>
+                        )}
                       </button>
                     )
                   })}

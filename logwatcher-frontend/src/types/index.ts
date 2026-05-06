@@ -65,6 +65,8 @@ export interface RemoteFileInfoDto {
   lastModified: string
   isDirectory: boolean
   serverId: string
+  hasChildren?: boolean
+  sourceName?: string
 }
 
 export interface HighlightingRule {
