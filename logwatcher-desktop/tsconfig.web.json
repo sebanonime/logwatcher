@@ -1,0 +1,21 @@
+{
+  "include": ["src/**/*", "src/**/*.d.ts"],
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "outDir": "out/renderer",
+    "paths": {
+      "@renderer/*": ["src/*"],
+      "@shared/*": ["../logwatcher-frontend/src/*"]
+    }
+  }
+}

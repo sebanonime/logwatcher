@@ -1,11 +1,25 @@
 import * as signalR from '@microsoft/signalr'
 
 let connection: signalR.HubConnection | null = null
+let _hubBaseUrl = ''
+
+/** Override the hub base URL (used by the desktop app to point to a remote server). */
+export function setHubBaseUrl(url: string): void {
+  if (_hubBaseUrl !== url) {
+    _hubBaseUrl = url
+    connection = null // force reconnect with new URL
+  }
+}
+
+export function getHubBaseUrl(): string {
+  return _hubBaseUrl
+}
 
 export function getLogHub(): signalR.HubConnection {
   if (!connection) {
+    const hubUrl = _hubBaseUrl ? `${_hubBaseUrl}/logHub` : '/logHub'
     connection = new signalR.HubConnectionBuilder()
-      .withUrl('/logHub', {
+      .withUrl(hubUrl, {
         accessTokenFactory: () => localStorage.getItem('logwatcher_token') ?? '',
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
