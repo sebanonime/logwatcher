@@ -5,6 +5,13 @@ import { join } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+const _pkgPath = resolve(__dirname, '../logwatcher-frontend/package.json')
+const _pkgVersion = (() => {
+  try { return (JSON.parse(readFileSync(_pkgPath, 'utf-8')) as { version: string }).version } catch { return '0.0.0' }
+})()
+const _buildStamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 12)
+const _appBuildId = `${_pkgVersion}+${_buildStamp}-desktop`
+
 // ─── Read saved server URL so the dev-server proxy is pre-configured ──────────
 function getSavedServerUrl(): string {
   const appData = process.env.APPDATA ?? join(homedir(), '.config')
@@ -72,6 +79,9 @@ export default defineConfig({
     plugins: [react()],
     css: {
       postcss: resolve(__dirname, '.'),
+    },
+    define: {
+      __APP_BUILD__: JSON.stringify(_appBuildId),
     },
   },
 })

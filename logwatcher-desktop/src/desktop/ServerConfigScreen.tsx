@@ -22,6 +22,14 @@ export function ServerConfigScreen({ onSave }: ServerConfigScreenProps) {
     if (!/^https?:\/\//i.test(finalUrl)) {
       finalUrl = 'https://' + finalUrl
     }
+    // Keep only scheme + host + port, strip any path the user may have pasted
+    try {
+      const parsed = new URL(finalUrl)
+      finalUrl = parsed.origin
+    } catch {
+      setError('Invalid URL format.')
+      return
+    }
 
     // Quick connectivity check
     try {
