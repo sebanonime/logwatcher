@@ -57,8 +57,7 @@ export function LocalFileDrop({ children }: LocalFileDropProps) {
 
       const files = Array.from(e.dataTransfer.files)
       for (const file of files) {
-        // In Electron, File objects exposed in renderer have a real path
-        const path: string = (file as unknown as { path: string }).path
+        const path = window.electronAPI.getPathForFile(file)
         if (path) await openFile(path)
       }
     },

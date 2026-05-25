@@ -110,3 +110,71 @@
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
+
+/* ─── rc-dock dark theme overrides ─────────────────────────────────────────── */
+
+.dock-layout {
+  background: var(--bg-1);
+}
+
+.dock-panel {
+  background: var(--bg-1);
+  border-color: var(--border-subtle);
+}
+
+.dock-top .dock-bar {
+  background: var(--surface-1);
+  border-bottom-color: var(--border-subtle);
+}
+
+.dock-tab {
+  background: var(--surface-1);
+  border-bottom-color: var(--border-subtle);
+  color: var(--text-3);
+}
+
+.dock-tab:hover {
+  color: var(--text-1);
+}
+
+.dock-tab-active,
+.dock-tab-active:hover {
+  background: var(--bg-1);
+  color: var(--text-1);
+}
+
+.dock-ink-bar {
+  background-color: var(--accent);
+}
+
+.dock-content-holder {
+  background: var(--bg-0);
+}
+
+.dock-dropdown-menu {
+  background-color: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+}
+
+.dock-dropdown-menu-item {
+  color: var(--text-2);
+}
+
+.dock-dropdown-menu-item:hover {
+  background: var(--surface-strong);
+  color: var(--text-1);
+}
+
+.dock-layout > .dock-drop-indicator {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-color: var(--accent);
+}
+
+.dock-drop-layer .dock-drop-square {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+}
+
+.dock-drop-layer .dock-drop-square-dropping {
+  background: var(--accent);
+}

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 // ─── Synchronous initial config (used for fetch intercept before React loads) ─
 const initialConfig = ipcRenderer.sendSync('config:getSync') as {
@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── File dialog ─────────────────────────────────────────────────────────
   openFileDialog: (): Promise<string | null> => ipcRenderer.invoke('dialog:openFile'),
+
+  // Replaces the deprecated File.path property (removed in Electron 32+)
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 
   // ── Local file operations ────────────────────────────────────────────────
   getLocalFileInfo: (

@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useCallback, useEffect, useRef } from 'react'
+import DockLayout from 'rc-dock'
+import type { TabData, LayoutData, PanelData } from 'rc-dock'
+import 'rc-dock/dist/rc-dock-dark.css'
 import type { HubConnection } from '@microsoft/signalr'
 import { useTabStore } from '@shared/store/logStore'
 import { LogViewer } from '@shared/components/LogViewer/LogViewer'
@@ -10,238 +12,179 @@ interface DesktopDockAreaProps {
   hub: HubConnection
 }
 
-/**
- * Combined dock area that shows both remote tabs (via SignalR) and
- * local file tabs (via IPC) in a single unified tab strip.
- */
+const MAIN_PANEL_ID = 'desktop-main-panel'
+
+const EMPTY_LAYOUT: LayoutData = {
+  dockbox: {
+    mode: 'horizontal',
+    children: [{ id: MAIN_PANEL_ID, tabs: [], panelLock: {} }],
+  },
+}
+
+function collectIds(node: unknown): Set<string> {
+  const ids = new Set<string>()
+  if (!node || typeof node !== 'object') return ids
+  const n = node as Record<string, unknown>
+  if (Array.isArray(n.tabs)) {
+    ;(n.tabs as { id?: string }[]).forEach((t) => { if (t.id) ids.add(t.id) })
+  }
+  if (Array.isArray(n.children)) {
+    ;(n.children as unknown[]).forEach((c) => collectIds(c).forEach((id) => ids.add(id)))
+  }
+  return ids
+}
+
+function addTabToDock(dock: DockLayout, tabData: TabData) {
+  const mainPanel = dock.find(MAIN_PANEL_ID) as PanelData | undefined
+  if (mainPanel) {
+    dock.dockMove(tabData, mainPanel, 'middle')
+  } else {
+    const layout = dock.getLayout()
+    const firstPanel = dock.find((item) => 'tabs' in item) as PanelData | undefined
+    if (firstPanel) {
+      dock.dockMove(tabData, firstPanel, 'middle')
+      return
+    }
+    dock.dockMove(tabData, layout.dockbox, 'middle')
+  }
+}
+
+function RemoteTabTitle({ sessionId }: { sessionId: string }) {
+  const tab = useTabStore((s) => s.tabs.find((t) => t.sessionId === sessionId))
+  if (!tab) return null
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, userSelect: 'none' }}>
+      {tab.newLinesCount > 0 && (
+        <span className="tab-pill__badge">{tab.newLinesCount}</span>
+      )}
+      {tab.displayName}
+    </span>
+  )
+}
+
 export function DesktopDockArea({ hub }: DesktopDockAreaProps) {
-  const { tabs: remoteTabs, activeSessionId, setActive: setActiveRemote, removeTab } = useTabStore()
-  const {
-    localTabs,
-    activeLocalTabId,
-    setActiveLocalTab,
-    closeLocalTab,
-  } = useDesktopStore()
-
-  // Unified "active" — either a remote sessionId or a local tabId
-  const [activeKind, setActiveKind] = useState<'remote' | 'local'>('remote')
-
+  const dockRef = useRef<DockLayout>(null)
   const hubRef = useRef(hub)
   hubRef.current = hub
 
-  const [menu, setMenu] = useState<{
-    x: number
-    y: number
-    kind: 'remote' | 'local'
-    id: string
-  } | null>(null)
+  const { tabs: remoteTabs, activeSessionId, removeTab, setActive } = useTabStore()
+  const { localTabs, activeLocalTabId, closeLocalTab, setActiveLocalTab } = useDesktopStore()
 
-  // Determine the overall active tab
-  const activeRemote = remoteTabs.find((t) => t.sessionId === activeSessionId)
-  const activeLocal = localTabs.find((t) => t.id === activeLocalTabId)
+  const knownIds = useRef(new Set<string>())
+
+  const loadTab = useCallback((data: TabData): TabData => {
+    const id = data.id ?? ''
+    if (id.startsWith('local:')) {
+      return { ...data, content: <LocalLogViewer tabId={id.slice(6)} /> }
+    }
+    return { ...data, content: <LogViewer sessionId={id} hub={hubRef.current} /> }
+  }, [])
+
+  // Sync remote tabs → dock (add new ones)
+  useEffect(() => {
+    const dock = dockRef.current
+    if (!dock) return
+    remoteTabs.forEach((tab) => {
+      if (knownIds.current.has(tab.sessionId)) return
+      knownIds.current.add(tab.sessionId)
+      addTabToDock(dock, {
+        id: tab.sessionId,
+        title: <RemoteTabTitle sessionId={tab.sessionId} />,
+        content: <LogViewer sessionId={tab.sessionId} hub={hubRef.current} />,
+        closable: true,
+      })
+    })
+  }, [remoteTabs])
+
+  // Sync local tabs → dock (add new ones)
+  useEffect(() => {
+    const dock = dockRef.current
+    if (!dock) return
+    localTabs.forEach((tab) => {
+      const dockId = `local:${tab.id}`
+      if (knownIds.current.has(dockId)) return
+      knownIds.current.add(dockId)
+      addTabToDock(dock, {
+        id: dockId,
+        title: `📄 ${tab.displayName}`,
+        content: <LocalLogViewer tabId={tab.id} />,
+        closable: true,
+      })
+    })
+  }, [localTabs])
+
+  useEffect(() => {
+    const dock = dockRef.current
+    if (!dock || !activeSessionId) return
+    dock.updateTab(activeSessionId, null, true)
+  }, [activeSessionId])
+
+  useEffect(() => {
+    const dock = dockRef.current
+    if (!dock || !activeLocalTabId) return
+    dock.updateTab(`local:${activeLocalTabId}`, null, true)
+  }, [activeLocalTabId])
+
+  // When user closes a tab inside the dock, update our stores
+  const handleLayoutChange = useCallback(
+    (newLayout: LayoutData, currentTabId?: string) => {
+      const currentIds = collectIds(newLayout.dockbox)
+      if (newLayout.floatbox) collectIds(newLayout.floatbox).forEach((id) => currentIds.add(id))
+
+      if (currentTabId) {
+        if (currentTabId.startsWith('local:')) {
+          setActiveLocalTab(currentTabId.slice(6))
+        } else {
+          setActive(currentTabId)
+        }
+      }
+
+      knownIds.current.forEach((id) => {
+        if (id === MAIN_PANEL_ID) return
+        if (!currentIds.has(id)) {
+          knownIds.current.delete(id)
+          if (id.startsWith('local:')) {
+            const filePath = id.slice(6)
+            window.electronAPI.unwatchLocalFile(filePath).catch(() => {})
+            closeLocalTab(filePath)
+          } else {
+            hubRef.current.invoke('CloseLog', id).catch(() => {})
+            removeTab(id)
+          }
+        }
+      })
+    },
+    [closeLocalTab, removeTab, setActive, setActiveLocalTab],
+  )
 
   const hasAnyTab = remoteTabs.length > 0 || localTabs.length > 0
 
-  // When a new local tab opens, switch to it
-  useEffect(() => {
-    if (activeLocalTabId) setActiveKind('local')
-  }, [activeLocalTabId])
-
-  const handleCloseRemote = useCallback(
-    (e: React.MouseEvent, sessionId: string) => {
-      e.stopPropagation()
-      hubRef.current.invoke('CloseLog', sessionId).catch(() => {})
-      removeTab(sessionId)
-    },
-    [removeTab]
-  )
-
-  const handleCloseLocal = useCallback(
-    (e: React.MouseEvent, id: string) => {
-      e.stopPropagation()
-      window.electronAPI.unwatchLocalFile(id).catch(() => {})
-      closeLocalTab(id)
-    },
-    [closeLocalTab]
-  )
-
-  useEffect(() => {
-    if (!menu) return
-    const onClose = () => setMenu(null)
-    window.addEventListener('mousedown', onClose)
-    return () => window.removeEventListener('mousedown', onClose)
-  }, [menu])
-
-  if (!hasAnyTab) {
-    return (
-      <div className="dock-area">
-        <div className="tab-strip" style={{ scrollbarWidth: 'none' }} />
-        <div className="empty-state viewer-empty-state">
-          Double-click a remote file in the browser, or{' '}
-          <strong>drop a local log file</strong> here to open it.
-        </div>
-      </div>
-    )
-  }
-
-  const isLocalActive = activeKind === 'local' && !!activeLocal
-  const activeViewer =
-    isLocalActive ? activeLocal : activeRemote ?? remoteTabs[0]
-
   return (
-    <div className="dock-area">
-      {/* ── Tab strip ── */}
-      <div className="tab-strip" style={{ scrollbarWidth: 'none' }}>
-        {/* Remote tabs */}
-        {remoteTabs.map((tab) => {
-          const isActive = activeKind === 'remote' && activeSessionId === tab.sessionId
-          return (
-            <div
-              key={tab.sessionId}
-              onClick={() => {
-                setActiveRemote(tab.sessionId)
-                setActiveKind('remote')
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setMenu({ x: e.clientX, y: e.clientY, kind: 'remote', id: tab.sessionId })
-              }}
-              className={`tab-pill ${isActive ? 'tab-pill--active' : ''}`}
-            >
-              <span className="tab-pill__title" title={tab.displayName}>
-                {tab.newLinesCount > 0 && (
-                  <span className="tab-pill__badge">{tab.newLinesCount}</span>
-                )}
-                {tab.displayName}
-              </span>
-              <button
-                className="tab-pill__close"
-                onClick={(e) => handleCloseRemote(e, tab.sessionId)}
-                aria-label={`Close ${tab.displayName}`}
-              >
-                ×
-              </button>
-            </div>
-          )
-        })}
-
-        {/* Separator between remote and local tabs */}
-        {remoteTabs.length > 0 && localTabs.length > 0 && (
-          <div
-            style={{
-              width: 1,
-              background: 'var(--border-strong)',
-              margin: '6px 4px',
-              alignSelf: 'stretch',
-            }}
-          />
-        )}
-
-        {/* Local tabs */}
-        {localTabs.map((tab) => {
-          const isActive = activeKind === 'local' && activeLocalTabId === tab.id
-          return (
-            <div
-              key={tab.id}
-              onClick={() => {
-                setActiveLocalTab(tab.id)
-                setActiveKind('local')
-              }}
-              className={`tab-pill tab-pill--local ${isActive ? 'tab-pill--active' : ''}`}
-              title={tab.filePath}
-            >
-              <span className="tab-pill__icon" aria-hidden>📄</span>
-              <span className="tab-pill__title">{tab.displayName}</span>
-              <button
-                className="tab-pill__close"
-                onClick={(e) => handleCloseLocal(e, tab.id)}
-                aria-label={`Close ${tab.displayName}`}
-              >
-                ×
-              </button>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* ── Viewer area ── */}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        {/* Remote viewers — keep mounted for state preservation */}
-        {remoteTabs.map((tab) => (
-          <div
-            key={tab.sessionId}
-            style={{
-              display:
-                activeKind === 'remote' && activeSessionId === tab.sessionId
-                  ? 'flex'
-                  : 'none',
-              flexDirection: 'column',
-              height: '100%',
-            }}
-          >
-            <LogViewer sessionId={tab.sessionId} hub={hub} />
-          </div>
-        ))}
-
-        {/* Local viewers */}
-        {localTabs.map((tab) => (
-          <div
-            key={tab.id}
-            style={{
-              display:
-                activeKind === 'local' && activeLocalTabId === tab.id
-                  ? 'flex'
-                  : 'none',
-              flexDirection: 'column',
-              height: '100%',
-            }}
-          >
-            <LocalLogViewer tabId={tab.id} />
-          </div>
-        ))}
-      </div>
-
-      {/* Context menu */}
-      {menu &&
-        createPortal(
-          <div
-            className="tab-context-menu"
-            style={{ top: menu.y, left: menu.x }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              className="tab-context-menu__item"
-              onClick={() => {
-                if (menu.kind === 'remote') {
-                  hubRef.current.invoke('CloseLog', menu.id).catch(() => {})
-                  removeTab(menu.id)
-                } else {
-                  window.electronAPI.unwatchLocalFile(menu.id).catch(() => {})
-                  closeLocalTab(menu.id)
-                }
-                setMenu(null)
-              }}
-            >
-              Close tab
-            </button>
-            {menu.kind === 'remote' && (
-              <button
-                className="tab-context-menu__item"
-                onClick={() => {
-                  const others = remoteTabs.filter((t) => t.sessionId !== menu.id)
-                  others.forEach((t) => {
-                    hubRef.current.invoke('CloseLog', t.sessionId).catch(() => {})
-                    removeTab(t.sessionId)
-                  })
-                  setMenu(null)
-                }}
-              >
-                Close other remote tabs
-              </button>
-            )}
-          </div>,
-          document.body
-        )}
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+      {!hasAnyTab && (
+        <div
+          className="viewer-empty-state"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          Double-click a remote file in the browser, or{' '}
+          <strong>&nbsp;drop a local log file&nbsp;</strong> here to open it.
+        </div>
+      )}
+      <DockLayout
+        ref={dockRef}
+        defaultLayout={EMPTY_LAYOUT}
+        loadTab={loadTab}
+        onLayoutChange={handleLayoutChange}
+        style={{ height: '100%', width: '100%' }}
+      />
     </div>
   )
 }

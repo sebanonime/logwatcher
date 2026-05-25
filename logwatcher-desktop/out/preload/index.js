@@ -14,6 +14,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   setLocalPrefs: (patch) => electron.ipcRenderer.invoke("prefs:set", patch),
   // ── File dialog ─────────────────────────────────────────────────────────
   openFileDialog: () => electron.ipcRenderer.invoke("dialog:openFile"),
+  // Replaces the deprecated File.path property (removed in Electron 32+)
+  getPathForFile: (file) => electron.webUtils.getPathForFile(file),
   // ── Local file operations ────────────────────────────────────────────────
   getLocalFileInfo: (path) => electron.ipcRenderer.invoke("localFile:info", path),
   readLocalFile: (path, startLine, count) => electron.ipcRenderer.invoke("localFile:read", path, startLine, count),

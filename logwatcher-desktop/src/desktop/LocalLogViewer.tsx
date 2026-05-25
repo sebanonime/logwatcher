@@ -33,7 +33,7 @@ export function LocalLogViewer({ tabId }: LocalLogViewerProps) {
     return profiles.find((p) => p.name === profileName)?.dicoHighLighting ?? []
   }, [profiles, tab])
 
-  const highlight = useHighlighting(profileHighlights, defaultHighlights)
+  const { highlightLine } = useHighlighting(profileHighlights, defaultHighlights)
 
   const rowCount = totalLines > 0 ? totalLines : 0
 
@@ -112,7 +112,7 @@ export function LocalLogViewer({ tabId }: LocalLogViewerProps) {
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {items.map((item) => {
             const text = getLineText(item.index)
-            const segments = text !== undefined ? highlight(text) : undefined
+            const segments = text !== undefined ? highlightLine(text) : undefined
             return (
               <div
                 key={item.key}

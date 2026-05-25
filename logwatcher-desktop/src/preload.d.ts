@@ -30,6 +30,7 @@ export interface ElectronAPI {
 
   // File dialog
   openFileDialog: () => Promise<string | null>
+  getPathForFile: (file: File) => string
 
   // Local file operations
   getLocalFileInfo: (path: string) => Promise<LocalFileInfo>
