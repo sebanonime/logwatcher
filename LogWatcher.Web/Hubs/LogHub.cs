@@ -136,5 +136,131 @@ namespace LogWatcher.Web.Hubs
             _sessions.OnClientDisconnected(Context.ConnectionId);
             await base.OnDisconnectedAsync(exception);
         }
+
+        /// <summary>
+        /// Searches file content within a directory for lines matching <paramref name="contentPattern"/>.
+        /// Only files whose names match <paramref name="nameFilter"/> (if non-empty) are searched.
+        /// Sends progress updates via OnSearchProgress(scanned, total) and returns matching files.
+        /// </summary>
+        public async Task<RemoteFileInfoDto[]> SearchFileContent(
+            string perimeterId, string rootFolderName, string subpath,
+            string nameFilter, string contentPattern, bool isRegex)
+        {
+            var servers = _serverConfig.GetServersInRoot(perimeterId, rootFolderName);
+            var allFiles = new List<(RemoteFileInfoDto File, IFileSourceProvider Provider)>();
+
+            // Collect candidate files from all servers
+            foreach (var server in servers)
+            {
+                IFileSourceProvider provider = server.Type switch
+                {
+                    "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
+                    "agent" => new AgentFileSourceProvider(server, _agentRegistry, _agentHub),
+                    _ => null
+                };
+                if (provider == null) continue;
+
+                try
+                {
+                    var basePath = server.Host ?? string.Empty;
+                    var dirPath = string.IsNullOrEmpty(subpath)
+                        ? basePath
+                        : Path.Combine(basePath, subpath).Replace('\\', '/');
+
+                    var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
+                    foreach (var item in items)
+                    {
+                        item.ServerId = server.Id;
+                        item.SourceName = server.Name;
+                    }
+                    var candidates = items.Where(i => !i.IsDirectory).ToList();
+
+                    // Apply name filter if provided
+                    if (!string.IsNullOrWhiteSpace(nameFilter))
+                        candidates = candidates.Where(f =>
+                            Path.GetFileName(f.Path).Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                    allFiles.AddRange(candidates.Select(f => (f, provider)));
+                }
+                catch { /* skip unreachable */ }
+            }
+
+            int total = allFiles.Count;
+            int scanned = 0;
+            var matches = new List<RemoteFileInfoDto>();
+            var nameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            System.Text.RegularExpressions.Regex regex = null;
+            if (isRegex && !string.IsNullOrWhiteSpace(contentPattern))
+            {
+                try { regex = new System.Text.RegularExpressions.Regex(contentPattern, System.Text.RegularExpressions.RegexOptions.None); }
+                catch { regex = null; }
+            }
+
+            await Clients.Caller.SendAsync("OnSearchProgress", 0, total);
+
+            foreach (var (file, provider) in allFiles)
+            {
+                try
+                {
+                    var found = await FileContainsPatternAsync(provider, file.Path, contentPattern, regex);
+                    if (found)
+                    {
+                        var fname = Path.GetFileName(file.Path);
+                        if (nameSet.Add(fname))
+                            matches.Add(file);
+                    }
+                }
+                catch { /* skip unreadable files */ }
+                finally
+                {
+                    scanned++;
+                    if (scanned % 5 == 0 || scanned == total)
+                        await Clients.Caller.SendAsync("OnSearchProgress", scanned, total);
+                }
+            }
+
+            // Dispose all providers
+            foreach (var (_, provider) in allFiles.GroupBy(x => x.Provider).Select(g => g.First()))
+                await provider.DisposeAsync();
+
+            return matches
+                .OrderBy(f => f.LastModified)
+                .ToArray();
+        }
+
+        private static async Task<bool> FileContainsPatternAsync(
+            IFileSourceProvider provider, string path, string pattern,
+            System.Text.RegularExpressions.Regex regex)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) return false;
+
+            const int MaxBytes = 8 * 1024 * 1024; // cap at 8 MB per file
+            long totalRead = 0;
+            var leftover = string.Empty;
+
+            await foreach (var chunk in provider.ReadRawAsync(path, 0, CancellationToken.None))
+            {
+                var text = System.Text.Encoding.UTF8.GetString(chunk.Span);
+                var combined = leftover + text;
+
+                if (regex != null)
+                {
+                    if (regex.IsMatch(combined)) return true;
+                }
+                else
+                {
+                    if (combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+
+                // Keep last few chars as leftover to handle matches split across chunks
+                leftover = combined.Length > 512 ? combined[^512..] : combined;
+
+                totalRead += chunk.Length;
+                if (totalRead >= MaxBytes) break;
+            }
+
+            return false;
+        }
     }
 }

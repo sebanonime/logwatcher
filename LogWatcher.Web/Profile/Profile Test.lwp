@@ -6,26 +6,12 @@
   <DicoHighLighting>
     <Highlighting>
       <Order>0</Order>
-      <Text>DEBUG</Text>
-      <ForeColorArgb>-1</ForeColorArgb>
-      <BackColorArgb>0</BackColorArgb>
-      <DarkForeColorArgb>-10117381</DarkForeColorArgb>
-      <DarkBackColorArgb>0</DarkBackColorArgb>
-      <LightForeColorArgb>-14406657</LightForeColorArgb>
-      <LightBackColorArgb>0</LightBackColorArgb>
-      <Bold>false</Bold>
-      <HightPriority>false</HightPriority>
-      <CaseSensitive>false</CaseSensitive>
-      <IsRegex>false</IsRegex>
-    </Highlighting>
-    <Highlighting>
-      <Order>1</Order>
       <Text>test</Text>
       <ForeColorArgb>-1</ForeColorArgb>
       <BackColorArgb>0</BackColorArgb>
       <DarkForeColorArgb>-8781824</DarkForeColorArgb>
       <DarkBackColorArgb>-13736448</DarkBackColorArgb>
-      <LightForeColorArgb>-16777216</LightForeColorArgb>
+      <LightForeColorArgb>0</LightForeColorArgb>
       <LightBackColorArgb>0</LightBackColorArgb>
       <Bold>true</Bold>
       <HightPriority>false</HightPriority>

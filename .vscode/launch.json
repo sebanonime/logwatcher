@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Full Stack",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "fullstack: prepare",
+      "program": "${workspaceFolder}/LogWatcher.Web/bin/Debug/net10.0/LogWatcher.Web.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/LogWatcher.Web",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "Now listening on",
+        "uriFormat": "http://localhost:5173"
+      },
+      "presentation": {
+        "group": "fullstack",
+        "label": "Backend (.NET)"
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { useBrowserStore } from '../../store/browserStore'
 import { usePerimeterStore } from '../../store/perimeterStore'
@@ -11,6 +11,13 @@ import type { ProfileDto, RemoteFileInfoDto } from '../../types'
 /** Extract just the last segment from a path, handling / and \ separators */
 function basename(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path
+}
+
+/** Returns true if the filename looks like a rolled log (e.g. app_01.log, app.2.log) */
+function isRolledFile(path: string): boolean {
+  const name = basename(path)
+  // Match: name_N.ext or name.N.ext where N is one or more digits
+  return /[_\.]\d+\.[^./\\]+$/.test(name)
 }
 
 function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | null {
@@ -41,7 +48,7 @@ function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | nu
  * │ Root Folders │ Subfolders      │
  * │              │ [filter]        │
  * ├──────────────┴─────────────────┤
- * │ Files [filter]                 │
+ * │ Files [name filter] [content filter] [Search]  │
  * └────────────────────────────────┘
  */
 export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -49,12 +56,15 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const {
     selectedRootFolder, subfolders, rootFiles, rootFilesFolderPath, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
+    contentFilter, contentFilterIsRegex, isSearchingContent, searchProgress, contentSearchResults,
     loadRoot, loadSubfolder, setSubfoldersFilter, setFilesFilter,
+    setContentFilter, setContentFilterIsRegex, searchContent, clearContentSearch, clearSearchResults,
   } = useBrowserStore()
 
   const { tabs, addTab, removeTab, setActive } = useTabStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
+  const [showSearchPopup, setShowSearchPopup] = useState(false)
 
   const handlePerimeterChange = useCallback((newPerimeterId: string) => {
     selectPerimeter(newPerimeterId)
@@ -124,6 +134,12 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     }
   }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, tabs, addTab, removeTab, setActive])
 
+  const handleSearchAndClose = useCallback(() => {
+    if (!selectedPerimeterId || !selectedRootFolder) return
+    searchContent(selectedPerimeterId, selectedRootFolder, selectedSubfolder)
+      .then(() => setShowSearchPopup(false))
+  }, [selectedPerimeterId, selectedRootFolder, selectedSubfolder, searchContent])
+
   const virtualRootFolder: RemoteFileInfoDto | null = rootFilesFolderPath && rootFiles.length > 0
     ? {
         path: rootFilesFolderPath,
@@ -142,17 +158,20 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   )
 
   // Detect basenames that appear more than once so we can show a disambiguation hint.
-  // Use displayedSubfolders (not filtered) so the hint still shows even when the filter
-  // hides the other duplicate.
   const subfoldersBasenameCounts = displayedSubfolders.reduce<Record<string, number>>((acc, f) => {
     const name = basename(f.path)
     acc[name] = (acc[name] ?? 0) + 1
     return acc
   }, {})
 
-  const filteredFiles = files.filter(f =>
-    basename(f.path).toLowerCase().includes(filesFilter.toLowerCase())
-  )
+  // Determine which file list to display
+  const displayedFiles = contentSearchResults !== null
+    ? contentSearchResults
+    : files.filter(f => basename(f.path).toLowerCase().includes(filesFilter.toLowerCase()))
+
+  const progressPct = searchProgress && searchProgress.total > 0
+    ? Math.round((searchProgress.scanned / searchProgress.total) * 100)
+    : 0
 
   return (
     <div className="browser-shell">
@@ -222,7 +241,6 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                   {filteredSubfolders.map(f => {
                     const name = basename(f.path)
                     const isDuplicate = (subfoldersBasenameCounts[name] ?? 0) > 1
-                    // Hint priority: SourceName (server Name from backend) → parent folder basename → nothing
                     const parentName = basename(f.path.replace(/[/\\][^/\\]+$/, ''))
                     const hint = isDuplicate ? (f.sourceName || parentName || null) : null
                     return (
@@ -252,27 +270,91 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
             <div className="browser-files surface-panel">
               <div className="browser-files-header">
                 <div>
-                  <div className="section-label">Files</div>
-                  <div className="section-subtitle">Double-click to open in the viewer</div>
+                  <div className="section-label">
+                    Files
+                    {contentSearchResults !== null && (
+                      <>
+                        <span className="browser-search-badge">{contentSearchResults.length} match{contentSearchResults.length !== 1 ? 'es' : ''}</span>
+                        <button className="browser-clear-results-btn" onClick={() => { clearContentSearch(); setShowSearchPopup(false) }} title="Clear search results">✕</button>
+                      </>
+                    )}
+                  </div>
+                  <div className="section-subtitle">Double-click to open</div>
                 </div>
-                <input
-                  className="control-input browser-files-filter"
-                  placeholder="Filter files…"
-                  value={filesFilter}
-                  onChange={e => setFilesFilter(e.target.value)}
-                />
+                <div className="browser-files-filter-row">
+                  <input
+                    className="control-input browser-files-filter"
+                    placeholder="Filter by name…"
+                    value={filesFilter}
+                    onChange={e => { setFilesFilter(e.target.value); clearSearchResults() }}
+                  />
+                  <div className="browser-search-popup-anchor">
+                    <button
+                      className={`control-button ${showSearchPopup || contentSearchResults !== null ? 'control-button--primary' : 'control-button--ghost'} browser-search-toggle`}
+                      title="Search in file contents"
+                      onClick={() => setShowSearchPopup(v => !v)}
+                    >⌕</button>
+                    {showSearchPopup && (
+                      <>
+                        <div className="browser-search-backdrop" onClick={() => setShowSearchPopup(false)} />
+                        <div className="browser-search-popup">
+                          <div className="browser-search-popup-header">
+                            <span>Search in file contents</span>
+                            <button className="control-button control-button--ghost browser-search-popup-close" onClick={() => setShowSearchPopup(false)}>✕</button>
+                          </div>
+                          <div className="browser-search-popup-body">
+                            <input
+                              className="control-input"
+                              placeholder="Content pattern…"
+                              value={contentFilter}
+                              autoFocus
+                              onChange={e => setContentFilter(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleSearchAndClose()}
+                            />
+                            <div className="browser-search-popup-row">
+                              <label className="settings-inline-check">
+                                <input type="checkbox" checked={contentFilterIsRegex} onChange={e => setContentFilterIsRegex(e.target.checked)} />
+                                Regex
+                              </label>
+                              <button
+                                className="control-button control-button--primary"
+                                onClick={handleSearchAndClose}
+                                disabled={isSearchingContent || !contentFilter.trim() || !selectedRootFolder}
+                              >
+                                {isSearchingContent ? 'Searching…' : 'Search'}
+                              </button>
+                              {contentSearchResults !== null && (
+                                <button className="control-button control-button--ghost" onClick={() => { clearContentSearch(); setShowSearchPopup(false) }}>Clear</button>
+                              )}
+                            </div>
+                            {isSearchingContent && searchProgress && (
+                              <div className="browser-search-progress">
+                                <div className="browser-search-progress-bar" style={{ width: `${progressPct}%` }} />
+                                <span className="browser-search-progress-label">
+                                  {searchProgress.scanned}/{searchProgress.total} files
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
+
               <div className="browser-file-list browser-file-list--uniform">
                 {isLoadingFiles && (
                   <div className="empty-state compact-empty-state browser-empty-state">Loading files…</div>
                 )}
-                {filteredFiles.map(f => {
+                {displayedFiles.map(f => {
                   const name = basename(f.path)
+                  const rolled = isRolledFile(f.path)
                   return (
                     <button
                       key={f.path}
                       onDoubleClick={() => handleOpenFile(f)}
-                      className="browser-file-row browser-file-row--uniform"
+                      className={`browser-file-row browser-file-row--uniform ${rolled ? 'browser-file-row--rolled' : ''}`}
                       title={`Double-click to open:\n${f.path}`}
                     >
                       <span className="browser-item-title">{name}</span>

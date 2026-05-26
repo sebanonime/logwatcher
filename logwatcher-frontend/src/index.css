@@ -1346,13 +1346,6 @@ select {
   padding: 7px;
 }
 
-.highlight-editor-controls {
-  display: grid;
-  grid-template-columns: minmax(140px, 1.2fr) repeat(4, auto) repeat(2, minmax(120px, auto)) auto;
-  gap: 6px;
-  align-items: center;
-}
-
 .highlight-preview {
   display: flex;
   gap: 8px;
@@ -1448,10 +1441,6 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .highlight-editor-controls {
-    grid-template-columns: 1fr;
-  }
-
   .highlight-preview {
     flex-direction: column;
   }
@@ -1475,4 +1464,378 @@ select {
     text-align: left;
     max-width: none;
   }
+}
+
+/* ─── LogBrowser Settings: stacked path form ─── */
+.settings-form-grid--stacked {
+  grid-template-columns: 1fr;
+}
+
+/* ─── Preferences layout: top row + profiles below ─── */
+.settings-prefs-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.settings-prefs-top-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(340px, 1.1fr);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-profiles-card {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── Preferences tabs ─── */
+.settings-tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0;
+  flex-shrink: 0;
+}
+
+.settings-tab-btn {
+  padding: 5px 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 12px;
+  position: relative;
+  bottom: -1px;
+}
+
+.settings-tab-btn:hover {
+  color: var(--text-1);
+  background: var(--surface-3);
+}
+
+.settings-tab-btn--active {
+  color: var(--text-1);
+  background: var(--surface-strong);
+  border-color: var(--border-subtle);
+  font-weight: 600;
+}
+
+.settings-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Color swatch picker ─── */
+.color-swatch-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.color-swatch-label {
+  display: inline-block;
+  width: 28px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.color-swatch-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.color-swatch-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.color-swatch-clear {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.color-swatch-clear:hover {
+  color: var(--danger);
+}
+
+/* ─── Highlight editor: theme inline row (dark + light side by side) ─── */
+.highlight-editor-top-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.highlight-editor-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.highlight-pattern-input {
+  width: 100%;
+}
+
+.highlight-flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.highlight-theme-inline-row {
+  display: flex;
+  gap: 6px;
+}
+
+.highlight-theme-cell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid;
+  flex: 1;
+  min-width: 0;
+}
+
+.highlight-theme-cell--dark {
+  background: #1e1e2e;
+  border-color: #383850;
+}
+
+.highlight-theme-cell--dark .highlight-theme-badge,
+.highlight-theme-cell--dark .highlight-theme-field-label {
+  color: #aaa;
+}
+
+.highlight-theme-cell--light {
+  background: #f4f4f5;
+  border-color: #d4d4d8;
+}
+
+.highlight-theme-cell--light .highlight-theme-badge,
+.highlight-theme-cell--light .highlight-theme-field-label {
+  color: #555;
+}
+
+.highlight-theme-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.highlight-theme-field-label {
+  font-size: 0.7rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ─── Highlight list row (no per-row reorder buttons) ─── */
+.highlight-editor-row--compact {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  padding: 5px 6px;
+  cursor: pointer;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ─── Reorder controls in the header ─── */
+.highlight-reorder-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.highlight-reorder-btn-main {
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.highlight-reorder-btn-main:hover:not(:disabled) {
+  background: var(--surface-strong);
+  color: var(--text-1);
+}
+
+.highlight-reorder-btn-main:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ─── LogBrowser: file filters area ─── */
+.browser-files-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.browser-search-toggle {
+  padding: 0 8px;
+  font-size: 14px;
+  min-width: 28px;
+  min-height: 24px;
+}
+
+/* ─── Content search popup ─── */
+.browser-search-popup-anchor {
+  position: relative;
+}
+
+.browser-search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.browser-search-popup {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  width: 280px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+
+.browser-search-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.browser-search-popup-close {
+  padding: 0 4px;
+  min-width: 20px;
+  min-height: 20px;
+  font-size: 11px;
+}
+
+.browser-search-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.browser-search-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.browser-search-progress {
+  position: relative;
+  height: 18px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.browser-search-progress-bar {
+  height: 100%;
+  background: var(--accent-2);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.browser-search-progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.browser-search-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.7rem;
+  background: rgba(124, 183, 255, 0.22);
+  color: var(--accent-2);
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* ─── Rolled file: dimmed foreground ─── */
+.browser-file-row--rolled {
+  opacity: 0.45;
+}
+
+.browser-file-row--rolled:hover {
+  opacity: 0.75;
+}
+
+/* ─── Highlight preview: fallback/inherited indicator ─── */
+.highlight-preview-swatch--fallback {
+  border-style: dashed;
+  opacity: 0.72;
+}
+
+/* ─── Clear search results button (inline next to badge) ─── */
+.browser-clear-results-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 9px;
+  line-height: 1;
+  vertical-align: middle;
+  margin-left: 1px;
+}
+
+.browser-clear-results-btn:hover {
+  color: var(--danger);
 }

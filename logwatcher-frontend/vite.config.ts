@@ -15,9 +15,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'https://localhost:7000', secure: false, changeOrigin: true },
-      '/logHub': { target: 'https://localhost:7000', secure: false, changeOrigin: true, ws: true },
-      '/agentHub': { target: 'https://localhost:7000', secure: false, changeOrigin: true, ws: true },
+      '/api': { target: 'https://localhost:7123', secure: false, changeOrigin: true },
+      '/logHub': { target: 'https://localhost:7123', secure: false, changeOrigin: true, ws: true },
+      '/agentHub': { target: 'https://localhost:7123', secure: false, changeOrigin: true, ws: true },
     }
   },
   build: {

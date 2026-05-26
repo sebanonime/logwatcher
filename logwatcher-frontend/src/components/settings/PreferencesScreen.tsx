@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { getPreferences, savePreferences } from '../../api/settings'
 import { usePreferencesStore } from '../../store/preferencesStore'
 import { useUiStore } from '../../store/uiStore'
@@ -35,33 +35,15 @@ function emptyHighlight(order: number): HighlightingRule {
 }
 
 function emptyHiddenLine(): HiddenLineDto {
-  return {
-    isActif: true,
-    text: '',
-    caseSensitive: false,
-    isRegex: false,
-  }
+  return { isActif: true, text: '', caseSensitive: false, isRegex: false }
 }
 
 function emptyStoredFilter(order: number): StoredFilterDto {
-  return {
-    name: `Filter ${order + 1}`,
-    filter: '',
-    isRegex: true,
-    caseSensitive: false,
-  }
+  return { name: `Filter ${order + 1}`, filter: '', isRegex: true, caseSensitive: false }
 }
 
 function emptyProfile(name = 'New Profile'): ProfileDto {
-  return {
-    name,
-    loadingParam: '',
-    encoding: 'UTF-8',
-    shared: false,
-    dicoHighLighting: [],
-    dicoHiddenLog: [],
-    dicoStoredFilter: [],
-  }
+  return { name, loadingParam: '', encoding: 'UTF-8', shared: false, dicoHighLighting: [], dicoHiddenLog: [], dicoStoredFilter: [] }
 }
 
 function argbToHex(argb: number | undefined, fallback: string): string {
@@ -83,38 +65,74 @@ function argbToCss(argb: number | undefined, fallback: string): string {
   return `rgb(${r},${g},${b})`
 }
 
-function HighlightListEditor({
-  title,
-  rules,
-  onChange,
-}: {
+function isColorSet(argb: number | undefined): boolean {
+  return argb !== undefined && argb !== 0 && argb !== -1
+}
+
+function resolveColor(primary: number | undefined, fallback1: number | undefined, fallback2: number | undefined, defaultCss: string): string {
+  for (const v of [primary, fallback1, fallback2]) {
+    if (isColorSet(v)) return argbToCss(v, defaultCss)
+  }
+  return defaultCss
+}
+
+function ColorSwatch({ value, fallback, onChange, canClear, onClear, title }: {
+  value: number | undefined
+  fallback: string
+  onChange: (argb: number) => void
+  canClear?: boolean
+  onClear?: () => void
+  title?: string
+}) {
+  const id = React.useId()
+  const isEmpty = !value || value === 0
+  const hex = argbToHex(value, fallback)
+  const cssColor = argbToCss(value, fallback)
+  return (
+    <span className="color-swatch-wrap" title={title}>
+      <label htmlFor={id} className="color-swatch-label" style={{ background: cssColor, borderColor: isEmpty ? 'var(--border-strong)' : cssColor }}>
+        {isEmpty && <span className="color-swatch-empty">—</span>}
+      </label>
+      <input id={id} type="color" className="color-swatch-input" value={hex} onChange={e => onChange(hexToArgb(e.target.value))} />
+      {canClear && !isEmpty && (
+        <button type="button" className="color-swatch-clear" title="Clear" onClick={onClear}>✕</button>
+      )}
+    </span>
+  )
+}
+
+function HighlightListEditor({ title, rules, onChange }: {
   title: string
   rules: HighlightingRule[]
   onChange: (rules: HighlightingRule[]) => void
 }) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(rules.length > 0 ? 0 : null)
+  const itemRefs = useRef<Map<number, HTMLElement>>(new Map())
 
   useEffect(() => {
-    if (rules.length === 0) {
-      setSelectedIndex(null)
-      return
-    }
-    if (selectedIndex === null || selectedIndex >= rules.length)
-      setSelectedIndex(0)
+    if (rules.length === 0) { setSelectedIndex(null); return }
+    if (selectedIndex === null || selectedIndex >= rules.length) setSelectedIndex(0)
   }, [rules, selectedIndex])
 
-  const updateRule = (index: number, patch: Partial<HighlightingRule>) => {
-    onChange(rules.map((rule, current) => current === index ? { ...rule, ...patch } : rule))
-  }
+  const updateRule = (index: number, patch: Partial<HighlightingRule>) =>
+    onChange(rules.map((rule, i) => i === index ? { ...rule, ...patch } : rule))
 
   const removeRule = (index: number) => {
-    const nextRules = rules.filter((_, current) => current !== index).map((rule, order) => ({ ...rule, order }))
-    onChange(nextRules)
-    if (nextRules.length === 0) {
-      setSelectedIndex(null)
-    } else if (selectedIndex !== null && selectedIndex >= nextRules.length) {
-      setSelectedIndex(nextRules.length - 1)
-    }
+    const next = rules.filter((_, i) => i !== index).map((r, i) => ({ ...r, order: i }))
+    onChange(next)
+    setSelectedIndex(next.length === 0 ? null : selectedIndex !== null && selectedIndex >= next.length ? next.length - 1 : selectedIndex)
+  }
+
+  const moveRule = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= rules.length) return
+    const next = [...rules]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onChange(next.map((r, i) => ({ ...r, order: i })))
+    setSelectedIndex(target)
+    requestAnimationFrame(() => {
+      itemRefs.current.get(target)?.scrollIntoView({ block: 'nearest' })
+    })
   }
 
   const addRule = () => {
@@ -123,67 +141,70 @@ function HighlightListEditor({
   }
 
   const selectedRule = selectedIndex === null ? null : (rules[selectedIndex] ?? null)
-  const darkBgAuto = selectedRule ? !selectedRule.darkBackColorArgb : true
-  const lightBgAuto = selectedRule ? !selectedRule.lightBackColorArgb : true
 
   return (
     <section className="settings-card">
       <div className="settings-card__header">
         <h3>{title}</h3>
         <div className="settings-actions-row">
-          <button className="control-button control-button--ghost" onClick={addRule}>Add highlight</button>
-          <button
-            className="control-button control-button--ghost"
+          <div className="highlight-reorder-controls">
+            <button className="highlight-reorder-btn-main" title="Move up"
+              disabled={selectedIndex === null || selectedIndex === 0}
+              onClick={() => selectedIndex !== null && moveRule(selectedIndex, -1)}>▲</button>
+            <button className="highlight-reorder-btn-main" title="Move down"
+              disabled={selectedIndex === null || selectedIndex === rules.length - 1}
+              onClick={() => selectedIndex !== null && moveRule(selectedIndex, 1)}>▼</button>
+          </div>
+          <button className="control-button control-button--ghost" onClick={addRule}>Add</button>
+          <button className="control-button control-button--ghost"
             onClick={() => selectedIndex !== null && removeRule(selectedIndex)}
-            disabled={selectedIndex === null}
-          >
-            Delete selected
-          </button>
+            disabled={selectedIndex === null}>Delete</button>
         </div>
       </div>
 
       {selectedRule ? (
         <div className="highlight-editor-pane">
           <div className="highlight-editor-controls">
-            <input
-              className="control-input"
-              value={selectedRule.text}
-              placeholder="Pattern"
-              onChange={event => updateRule(selectedIndex!, { text: event.target.value })}
-            />
-            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.isRegex} onChange={event => updateRule(selectedIndex!, { isRegex: event.target.checked })} />Regex</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.caseSensitive} onChange={event => updateRule(selectedIndex!, { caseSensitive: event.target.checked })} />Case</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.bold} onChange={event => updateRule(selectedIndex!, { bold: event.target.checked })} />Bold</label>
-            <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.hightPriority} onChange={event => updateRule(selectedIndex!, { hightPriority: event.target.checked })} />Priority</label>
-            <div className="highlight-color-pair">
-              <span>Dark</span>
-              <input
-                type="color"
-                value={argbToHex(selectedRule.darkForeColorArgb ?? selectedRule.foreColorArgb, '#ffffff')}
-                onChange={event => updateRule(selectedIndex!, { darkForeColorArgb: hexToArgb(event.target.value) })}
-              />
-              <input
-                type="color"
-                value={argbToHex(selectedRule.darkBackColorArgb, '#1b2533')}
-                disabled={darkBgAuto}
-                onChange={event => updateRule(selectedIndex!, { darkBackColorArgb: hexToArgb(event.target.value) })}
-              />
-              <label className="settings-inline-check"><input type="checkbox" checked={darkBgAuto} onChange={event => updateRule(selectedIndex!, { darkBackColorArgb: event.target.checked ? 0 : hexToArgb('#1b2533') })} />Auto BG</label>
+            <div className="highlight-editor-top-row">
+              <input className="control-input highlight-pattern-input" value={selectedRule.text}
+                placeholder="Pattern"
+                onChange={e => updateRule(selectedIndex!, { text: e.target.value })} />
+              <div className="highlight-flags-row">
+                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.isRegex} onChange={e => updateRule(selectedIndex!, { isRegex: e.target.checked })} />Regex</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.caseSensitive} onChange={e => updateRule(selectedIndex!, { caseSensitive: e.target.checked })} />Case</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.bold} onChange={e => updateRule(selectedIndex!, { bold: e.target.checked })} />Bold</label>
+                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.hightPriority} onChange={e => updateRule(selectedIndex!, { hightPriority: e.target.checked })} />Priority</label>
+              </div>
             </div>
-            <div className="highlight-color-pair">
-              <span>Light</span>
-              <input
-                type="color"
-                value={argbToHex(selectedRule.lightForeColorArgb ?? selectedRule.foreColorArgb, '#000000')}
-                onChange={event => updateRule(selectedIndex!, { lightForeColorArgb: hexToArgb(event.target.value) })}
-              />
-              <input
-                type="color"
-                value={argbToHex(selectedRule.lightBackColorArgb, '#ffffff')}
-                disabled={lightBgAuto}
-                onChange={event => updateRule(selectedIndex!, { lightBackColorArgb: hexToArgb(event.target.value) })}
-              />
-              <label className="settings-inline-check"><input type="checkbox" checked={lightBgAuto} onChange={event => updateRule(selectedIndex!, { lightBackColorArgb: event.target.checked ? 0 : hexToArgb('#ffffff') })} />Auto BG</label>
+            <div className="highlight-theme-inline-row">
+              <div className="highlight-theme-cell highlight-theme-cell--dark">
+                <span className="highlight-theme-badge">◑</span>
+                <span className="highlight-theme-field-label">Text</span>
+                <ColorSwatch value={selectedRule.darkForeColorArgb || selectedRule.foreColorArgb} fallback="#ffffff"
+                  title="Dark theme text color"
+                  onChange={v => updateRule(selectedIndex!, { darkForeColorArgb: v, foreColorArgb: v })}
+                  canClear={isColorSet(selectedRule.darkForeColorArgb)}
+                  onClear={() => updateRule(selectedIndex!, { darkForeColorArgb: -1, foreColorArgb: -1 })} />
+                <span className="highlight-theme-field-label">Background</span>
+                <ColorSwatch value={selectedRule.darkBackColorArgb || undefined} fallback="#1b2533"
+                  title="Dark theme background (empty = none)"
+                  onChange={v => updateRule(selectedIndex!, { darkBackColorArgb: v })}
+                  canClear onClear={() => updateRule(selectedIndex!, { darkBackColorArgb: 0 })} />
+              </div>
+              <div className="highlight-theme-cell highlight-theme-cell--light">
+                <span className="highlight-theme-badge">◐</span>
+                <span className="highlight-theme-field-label">Text</span>
+                <ColorSwatch value={selectedRule.lightForeColorArgb || undefined} fallback="#000000"
+                  title="Light theme text color (empty = use dark)"
+                  onChange={v => updateRule(selectedIndex!, { lightForeColorArgb: v })}
+                  canClear={!!(selectedRule.lightForeColorArgb)}
+                  onClear={() => updateRule(selectedIndex!, { lightForeColorArgb: 0 })} />
+                <span className="highlight-theme-field-label">Background</span>
+                <ColorSwatch value={selectedRule.lightBackColorArgb || undefined} fallback="#ffffff"
+                  title="Light theme background (empty = none)"
+                  onChange={v => updateRule(selectedIndex!, { lightBackColorArgb: v })}
+                  canClear onClear={() => updateRule(selectedIndex!, { lightBackColorArgb: 0 })} />
+              </div>
             </div>
           </div>
         </div>
@@ -194,32 +215,32 @@ function HighlightListEditor({
       <div className="highlight-editor-list">
         {rules.length === 0 && <div className="empty-state compact-empty-state">No highlights configured.</div>}
         {rules.map((rule, index) => {
+          const darkHasFore = isColorSet(rule.darkForeColorArgb) || isColorSet(rule.foreColorArgb)
+          const lightHasFore = isColorSet(rule.lightForeColorArgb)
           return (
-            <button
-              type="button"
-              key={`${title}-${index}`}
-              className={`highlight-editor-row highlight-editor-row--compact ${selectedIndex === index ? 'highlight-editor-row--active' : ''}`}
-              onClick={() => setSelectedIndex(index)}
-            >
-              <div className="highlight-preview">
-                <div className="highlight-preview-swatch highlight-preview-swatch--dark">
-                  <span className="highlight-preview-label">◑ Dark</span>
-                  <span className="highlight-preview-text" style={{
-                    color: argbToCss(rule.darkForeColorArgb ?? rule.foreColorArgb, '#ffffff'),
-                    backgroundColor: argbToCss(rule.darkBackColorArgb, '#1b2533'),
-                    fontWeight: rule.bold ? 'bold' : undefined,
-                  }}>{rule.text || 'Sample text'}</span>
-                </div>
-                <div className="highlight-preview-swatch highlight-preview-swatch--light">
-                  <span className="highlight-preview-label">◐ Light</span>
-                  <span className="highlight-preview-text" style={{
-                    color: argbToCss(rule.lightForeColorArgb ?? rule.foreColorArgb, '#000000'),
-                    backgroundColor: argbToCss(rule.lightBackColorArgb, '#ffffff'),
-                    fontWeight: rule.bold ? 'bold' : undefined,
-                  }}>{rule.text || 'Sample text'}</span>
-                </div>
+          <div key={`${title}-${index}`}
+            ref={el => { if (el) itemRefs.current.set(index, el); else itemRefs.current.delete(index) }}
+            className={`highlight-editor-row highlight-editor-row--compact ${selectedIndex === index ? 'highlight-editor-row--active' : ''}`}
+            onClick={() => setSelectedIndex(index)}>
+            <div className="highlight-preview">
+              <div className={`highlight-preview-swatch highlight-preview-swatch--dark${!darkHasFore ? ' highlight-preview-swatch--fallback' : ''}`}>
+                <span className="highlight-preview-label" title={!darkHasFore ? 'No dark colors — using fallback' : undefined}>{darkHasFore ? '◑' : '~◑'}</span>
+                <span className="highlight-preview-text" style={{
+                  color: resolveColor(rule.darkForeColorArgb, rule.lightForeColorArgb, rule.foreColorArgb, '#ffffff'),
+                  backgroundColor: resolveColor(rule.darkBackColorArgb, rule.lightBackColorArgb, undefined, 'transparent'),
+                  fontWeight: rule.bold ? 'bold' : undefined,
+                }}>{rule.text || 'Sample text'}</span>
               </div>
-            </button>
+              <div className={`highlight-preview-swatch highlight-preview-swatch--light${!lightHasFore ? ' highlight-preview-swatch--fallback' : ''}`}>
+                <span className="highlight-preview-label" title={!lightHasFore ? 'No light colors — using fallback' : undefined}>{lightHasFore ? '◐' : '~◐'}</span>
+                <span className="highlight-preview-text" style={{
+                  color: resolveColor(rule.lightForeColorArgb, rule.darkForeColorArgb, rule.foreColorArgb, '#000000'),
+                  backgroundColor: resolveColor(rule.lightBackColorArgb, rule.darkBackColorArgb, undefined, 'transparent'),
+                  fontWeight: rule.bold ? 'bold' : undefined,
+                }}>{rule.text || 'Sample text'}</span>
+              </div>
+            </div>
+          </div>
           )
         })}
       </div>
@@ -232,6 +253,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
   const { theme, setTheme, fontFamily, setFontFamily, fontSize, setFontSize } = useUiStore()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'prefs' | 'highlights' | 'profiles'>('prefs')
   const [defaultsDraft, setDefaultsDraft] = useState<HighlightingRule[]>([])
   const [profilesDraft, setProfilesDraft] = useState<ProfileDto[]>([])
   const [themeDraft, setThemeDraft] = useState<'dark' | 'light'>(theme)
@@ -253,28 +275,20 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
         setSelectedProfileIndex(payload.profiles.length > 0 ? 0 : null)
         setSelectedStoredFilterIndex(payload.profiles[0]?.dicoStoredFilter?.length ? 0 : null)
       })
-      .catch((fetchError) => setError(fetchError instanceof Error ? fetchError.message : 'Failed to load preferences.'))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load preferences.'))
   }, [setPreferences, theme, fontFamily, fontSize])
 
-  useEffect(() => {
-    setDefaultsDraft(defaultHighlights)
-  }, [defaultHighlights])
+  useEffect(() => { setDefaultsDraft(defaultHighlights) }, [defaultHighlights])
 
   useEffect(() => {
     setProfilesDraft(profiles)
-    if (profiles.length > 0 && selectedProfileIndex === null) {
-      setSelectedProfileIndex(0)
-    }
+    if (profiles.length > 0 && selectedProfileIndex === null) setSelectedProfileIndex(0)
   }, [profiles, selectedProfileIndex])
 
   useEffect(() => {
-    if (selectedProfileIndex === null) {
-      setSelectedStoredFilterIndex(null)
-      return
-    }
-
-    const storedFilters = profilesDraft[selectedProfileIndex]?.dicoStoredFilter ?? []
-    setSelectedStoredFilterIndex(storedFilters.length > 0 ? 0 : null)
+    if (selectedProfileIndex === null) { setSelectedStoredFilterIndex(null); return }
+    const filters = profilesDraft[selectedProfileIndex]?.dicoStoredFilter ?? []
+    setSelectedStoredFilterIndex(filters.length > 0 ? 0 : null)
   }, [selectedProfileIndex, profilesDraft])
 
   const selectedProfile = useMemo(
@@ -289,24 +303,17 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
   const updateSelectedProfile = (patch: Partial<ProfileDto>) => {
     if (selectedProfileIndex === null || !selectedProfile) return
-    setProfilesDraft(profilesDraft.map((profile, index) =>
-      index === selectedProfileIndex ? { ...profile, ...patch } : profile
-    ))
+    setProfilesDraft(profilesDraft.map((p, i) => i === selectedProfileIndex ? { ...p, ...patch } : p))
   }
 
   const updateSelectedStoredFilter = (patch: Partial<StoredFilterDto>) => {
     if (!selectedProfile || selectedStoredFilterIndex === null) return
     const current = selectedProfile.dicoStoredFilter ?? []
-    updateSelectedProfile({
-      dicoStoredFilter: current.map((item, index) =>
-        index === selectedStoredFilterIndex ? { ...item, ...patch } : item
-      ),
-    })
+    updateSelectedProfile({ dicoStoredFilter: current.map((item, i) => i === selectedStoredFilterIndex ? { ...item, ...patch } : item) })
   }
 
   const createProfile = () => {
-    const baseName = `Profile ${profilesDraft.length + 1}`
-    const profile = emptyProfile(baseName)
+    const profile = emptyProfile(`Profile ${profilesDraft.length + 1}`)
     setProfilesDraft([...profilesDraft, profile])
     setSelectedProfileIndex(profilesDraft.length)
     setSelectedStoredFilterIndex(null)
@@ -314,10 +321,10 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
   const removeSelectedProfile = () => {
     if (selectedProfileIndex === null) return
-    const nextProfiles = profilesDraft.filter((_, index) => index !== selectedProfileIndex)
-    setProfilesDraft(nextProfiles)
-    setSelectedProfileIndex(nextProfiles.length > 0 ? 0 : null)
-    setSelectedStoredFilterIndex(nextProfiles[0]?.dicoStoredFilter?.length ? 0 : null)
+    const next = profilesDraft.filter((_, i) => i !== selectedProfileIndex)
+    setProfilesDraft(next)
+    setSelectedProfileIndex(next.length > 0 ? 0 : null)
+    setSelectedStoredFilterIndex(next[0]?.dicoStoredFilter?.length ? 0 : null)
   }
 
   const addHiddenLine = () => {
@@ -327,18 +334,12 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
   const updateHiddenLine = (index: number, patch: Partial<HiddenLineDto>) => {
     if (!selectedProfile) return
-    updateSelectedProfile({
-      dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).map((line, current) =>
-        current === index ? { ...line, ...patch } : line
-      ),
-    })
+    updateSelectedProfile({ dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).map((l, i) => i === index ? { ...l, ...patch } : l) })
   }
 
   const removeHiddenLine = (index: number) => {
     if (!selectedProfile) return
-    updateSelectedProfile({
-      dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).filter((_, current) => current !== index),
-    })
+    updateSelectedProfile({ dicoHiddenLog: (selectedProfile.dicoHiddenLog ?? []).filter((_, i) => i !== index) })
   }
 
   const addStoredFilter = () => {
@@ -351,7 +352,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
   const removeStoredFilter = () => {
     if (!selectedProfile || selectedStoredFilterIndex === null) return
-    const next = (selectedProfile.dicoStoredFilter ?? []).filter((_, index) => index !== selectedStoredFilterIndex)
+    const next = (selectedProfile.dicoStoredFilter ?? []).filter((_, i) => i !== selectedStoredFilterIndex)
     updateSelectedProfile({ dicoStoredFilter: next })
     setSelectedStoredFilterIndex(next.length > 0 ? 0 : null)
   }
@@ -360,10 +361,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
     setIsSaving(true)
     setError(null)
     try {
-      const payload: PreferencesPayloadDto = {
-        defaultHighlights: defaultsDraft,
-        profiles: profilesDraft,
-      }
+      const payload: PreferencesPayloadDto = { defaultHighlights: defaultsDraft, profiles: profilesDraft }
       const saved = await savePreferences(payload)
       setTheme(themeDraft)
       setFontFamily(fontFamilyDraft)
@@ -374,8 +372,8 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
       setSelectedProfileIndex(saved.profiles.length > 0 ? 0 : null)
       setSelectedStoredFilterIndex(saved.profiles[0]?.dicoStoredFilter?.length ? 0 : null)
       onClose()
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save preferences.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save preferences.')
     } finally {
       setIsSaving(false)
     }
@@ -397,159 +395,150 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
         {error && <div className="settings-error">{error}</div>}
 
-        <div className="settings-grid">
-          <section className="settings-card">
-            <div className="settings-card__header">
-              <h3>User preferences</h3>
-            </div>
-            <div className="settings-form-grid">
-              <label>
-                Theme
-                <select className="control-input" value={themeDraft} onChange={event => setThemeDraft(event.target.value as 'dark' | 'light')}>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                </select>
-              </label>
-              <label>
-                Font
-                <select className="control-input" value={fontFamilyDraft} onChange={event => setFontFamilyDraft(event.target.value as UserFontFamily)}>
-                  {FONT_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <label>
-                Text size
-                <input className="control-input" type="number" min={10} max={22} value={fontSizeDraft} onChange={event => setFontSizeDraft(Number(event.target.value))} />
-              </label>
-            </div>
-          </section>
+        <div className="settings-tab-bar">
+          <button className={`settings-tab-btn ${activeTab === 'prefs' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('prefs')}>User preferences</button>
+          <button className={`settings-tab-btn ${activeTab === 'highlights' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('highlights')}>Default highlights</button>
+          <button className={`settings-tab-btn ${activeTab === 'profiles' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('profiles')}>Profiles</button>
+        </div>
 
-          <HighlightListEditor title="Default highlights" rules={defaultsDraft} onChange={setDefaultsDraft} />
-
-          <section className="settings-card settings-card--split">
-            <div className="settings-card__header">
-              <h3>Profiles</h3>
-              <div className="settings-actions-row">
-                <button className="control-button control-button--ghost" onClick={createProfile}>New</button>
-                <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile}>Delete</button>
+        <div className="settings-tab-content">
+          {activeTab === 'prefs' && (
+            <section className="settings-card">
+              <div className="settings-card__header"><h3>User preferences</h3></div>
+              <div className="settings-form-grid">
+                <label>Theme
+                  <select className="control-input" value={themeDraft} onChange={e => setThemeDraft(e.target.value as 'dark' | 'light')}>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                  </select>
+                </label>
+                <label>Font
+                  <select className="control-input" value={fontFamilyDraft} onChange={e => setFontFamilyDraft(e.target.value as UserFontFamily)}>
+                    {FONT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </label>
+                <label>Text size
+                  <input className="control-input" type="number" min={10} max={22} value={fontSizeDraft} onChange={e => setFontSizeDraft(Number(e.target.value))} />
+                </label>
               </div>
-            </div>
-            <div className="settings-split-layout">
-              <div className="settings-list-panel">
-                {profilesDraft.map((profile, index) => (
-                  <button
-                    key={`${profile.name}-${index}`}
-                    className={`settings-list-item ${selectedProfileIndex === index ? 'settings-list-item--active' : ''}`}
-                    onClick={() => {
-                      setSelectedProfileIndex(index)
-                      setSelectedStoredFilterIndex(profile.dicoStoredFilter?.length ? 0 : null)
-                    }}
-                  >
-                    {profile.name}
-                  </button>
-                ))}
+            </section>
+          )}
+
+          {activeTab === 'highlights' && (
+            <HighlightListEditor title="Default highlights" rules={defaultsDraft} onChange={setDefaultsDraft} />
+          )}
+
+          {activeTab === 'profiles' && (
+            <section className="settings-card settings-profiles-card">
+              <div className="settings-card__header">
+                <h3>Profiles</h3>
+                <div className="settings-actions-row">
+                  <button className="control-button control-button--ghost" onClick={createProfile}>New</button>
+                  <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile}>Delete</button>
+                </div>
               </div>
-              <div className="settings-detail-panel">
-                {selectedProfile ? (
-                  <>
-                    <div className="settings-form-grid">
-                      <label>
-                        Profile name
-                        <input className="control-input" value={selectedProfile.name} onChange={event => updateSelectedProfile({ name: event.target.value })} />
-                      </label>
-                      <label>
-                        Encoding
-                        <input className="control-input" value={selectedProfile.encoding ?? 'UTF-8'} onChange={event => updateSelectedProfile({ encoding: event.target.value })} />
-                      </label>
-                      <label>
-                        Loading param
-                        <input className="control-input" value={selectedProfile.loadingParam ?? ''} onChange={event => updateSelectedProfile({ loadingParam: event.target.value })} />
-                      </label>
-                    </div>
+              <div className="settings-split-layout">
+                <div className="settings-list-panel">
+                  {profilesDraft.map((profile, index) => (
+                    <button key={`${profile.name}-${index}`}
+                      className={`settings-list-item ${selectedProfileIndex === index ? 'settings-list-item--active' : ''}`}
+                      onClick={() => { setSelectedProfileIndex(index); setSelectedStoredFilterIndex(profile.dicoStoredFilter?.length ? 0 : null) }}>
+                      {profile.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="settings-detail-panel">
+                  {selectedProfile ? (
+                    <>
+                      <div className="settings-form-grid">
+                        <label>Profile name
+                          <input className="control-input" value={selectedProfile.name} onChange={e => updateSelectedProfile({ name: e.target.value })} />
+                        </label>
+                        <label>Encoding
+                          <input className="control-input" value={selectedProfile.encoding ?? 'UTF-8'} onChange={e => updateSelectedProfile({ encoding: e.target.value })} />
+                        </label>
+                        <label>Loading param
+                          <input className="control-input" value={selectedProfile.loadingParam ?? ''} onChange={e => updateSelectedProfile({ loadingParam: e.target.value })} />
+                        </label>
+                      </div>
 
-                    <div className="settings-actions-row profile-tabs">
-                      <button className={`control-chip ${activeProfileTab === 'highlight' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('highlight')}>Highlight</button>
-                      <button className={`control-chip ${activeProfileTab === 'hidden' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('hidden')}>Hidden lines</button>
-                      <button className={`control-chip ${activeProfileTab === 'stored' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('stored')}>Stored filter</button>
-                    </div>
+                      <div className="settings-actions-row profile-tabs">
+                        <button className={`control-chip ${activeProfileTab === 'highlight' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('highlight')}>Highlight</button>
+                        <button className={`control-chip ${activeProfileTab === 'hidden' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('hidden')}>Hidden lines</button>
+                        <button className={`control-chip ${activeProfileTab === 'stored' ? 'control-chip--active' : ''}`} onClick={() => setActiveProfileTab('stored')}>Stored filter</button>
+                      </div>
 
-                    {activeProfileTab === 'highlight' && (
-                      <HighlightListEditor
-                        title="Profile highlights"
-                        rules={selectedProfile.dicoHighLighting ?? []}
-                        onChange={rules => updateSelectedProfile({ dicoHighLighting: rules })}
-                      />
-                    )}
+                      {activeProfileTab === 'highlight' && (
+                        <HighlightListEditor title="Profile highlights"
+                          rules={selectedProfile.dicoHighLighting ?? []}
+                          onChange={rules => updateSelectedProfile({ dicoHighLighting: rules })} />
+                      )}
 
-                    {activeProfileTab === 'hidden' && (
-                      <section className="settings-card">
-                        <div className="settings-card__header">
-                          <h3>Hidden lines</h3>
-                          <button className="control-button control-button--ghost" onClick={addHiddenLine}>Add hidden line</button>
-                        </div>
-                        <div className="settings-list-panel">
-                          {(selectedProfile.dicoHiddenLog ?? []).length === 0 && <div className="empty-state compact-empty-state">No hidden lines configured.</div>}
-                          {(selectedProfile.dicoHiddenLog ?? []).map((line, index) => (
-                            <div key={`${selectedProfile.name}-hidden-${index}`} className="settings-row-line">
-                              <input className="control-input" value={line.text} placeholder="Pattern" onChange={event => updateHiddenLine(index, { text: event.target.value })} />
-                              <label className="settings-inline-check"><input type="checkbox" checked={line.isRegex} onChange={event => updateHiddenLine(index, { isRegex: event.target.checked })} />Regex</label>
-                              <label className="settings-inline-check"><input type="checkbox" checked={line.caseSensitive} onChange={event => updateHiddenLine(index, { caseSensitive: event.target.checked })} />Case</label>
-                              <label className="settings-inline-check"><input type="checkbox" checked={line.isActif} onChange={event => updateHiddenLine(index, { isActif: event.target.checked })} />Active</label>
-                              <button className="control-button control-button--ghost" onClick={() => removeHiddenLine(index)}>Delete</button>
+                      {activeProfileTab === 'hidden' && (
+                        <section className="settings-card">
+                          <div className="settings-card__header">
+                            <h3>Hidden lines</h3>
+                            <button className="control-button control-button--ghost" onClick={addHiddenLine}>Add</button>
+                          </div>
+                          <div className="settings-list-panel">
+                            {(selectedProfile.dicoHiddenLog ?? []).length === 0 && <div className="empty-state compact-empty-state">No hidden lines configured.</div>}
+                            {(selectedProfile.dicoHiddenLog ?? []).map((line, index) => (
+                              <div key={`hidden-${index}`} className="settings-row-line">
+                                <input className="control-input" value={line.text} placeholder="Pattern" onChange={e => updateHiddenLine(index, { text: e.target.value })} />
+                                <label className="settings-inline-check"><input type="checkbox" checked={line.isRegex} onChange={e => updateHiddenLine(index, { isRegex: e.target.checked })} />Regex</label>
+                                <label className="settings-inline-check"><input type="checkbox" checked={line.caseSensitive} onChange={e => updateHiddenLine(index, { caseSensitive: e.target.checked })} />Case</label>
+                                <label className="settings-inline-check"><input type="checkbox" checked={line.isActif} onChange={e => updateHiddenLine(index, { isActif: e.target.checked })} />Active</label>
+                                <button className="control-button control-button--ghost" onClick={() => removeHiddenLine(index)}>Delete</button>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeProfileTab === 'stored' && (
+                        <section className="settings-card">
+                          <div className="settings-card__header">
+                            <h3>Stored filters</h3>
+                            <div className="settings-actions-row">
+                              <button className="control-button control-button--ghost" onClick={addStoredFilter}>Add</button>
+                              <button className="control-button control-button--ghost" onClick={removeStoredFilter} disabled={!selectedStoredFilter}>Delete</button>
                             </div>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-
-                    {activeProfileTab === 'stored' && (
-                      <section className="settings-card">
-                        <div className="settings-card__header">
-                          <h3>Stored filters</h3>
-                          <div className="settings-actions-row">
-                            <button className="control-button control-button--ghost" onClick={addStoredFilter}>Add</button>
-                            <button className="control-button control-button--ghost" onClick={removeStoredFilter} disabled={!selectedStoredFilter}>Delete</button>
                           </div>
-                        </div>
-                        <div className="settings-form-grid">
-                          <label>
-                            Stored filter
-                            <select
-                              className="control-input"
-                              value={selectedStoredFilterIndex ?? ''}
-                              onChange={event => setSelectedStoredFilterIndex(event.target.value === '' ? null : Number(event.target.value))}
-                            >
-                              <option value="">Select a filter</option>
-                              {(selectedProfile.dicoStoredFilter ?? []).map((filter, index) => (
-                                <option key={`${filter.name}-${index}`} value={index}>{filter.name}</option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        {selectedStoredFilter ? (
-                          <div className="settings-row-line settings-row-line--stacked">
-                            <label>
-                              Name
-                              <input className="control-input" value={selectedStoredFilter.name} onChange={event => updateSelectedStoredFilter({ name: event.target.value })} />
+                          <div className="settings-form-grid">
+                            <label>Stored filter
+                              <select className="control-input" value={selectedStoredFilterIndex ?? ''}
+                                onChange={e => setSelectedStoredFilterIndex(e.target.value === '' ? null : Number(e.target.value))}>
+                                <option value="">Select a filter</option>
+                                {(selectedProfile.dicoStoredFilter ?? []).map((f, i) => (
+                                  <option key={`${f.name}-${i}`} value={i}>{f.name}</option>
+                                ))}
+                              </select>
                             </label>
-                            <label>
-                              Filter
-                              <input className="control-input" value={selectedStoredFilter.filter} onChange={event => updateSelectedStoredFilter({ filter: event.target.value })} />
-                            </label>
-                            <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={event => updateSelectedStoredFilter({ isRegex: event.target.checked })} />Regex</label>
-                            <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.caseSensitive} onChange={event => updateSelectedStoredFilter({ caseSensitive: event.target.checked })} />Case sensitive</label>
                           </div>
-                        ) : (
-                          <div className="empty-state compact-empty-state">Select or create a stored filter.</div>
-                        )}
-                      </section>
-                    )}
-                  </>
-                ) : (
-                  <div className="empty-state compact-empty-state">Select or create a profile.</div>
-                )}
+                          {selectedStoredFilter ? (
+                            <div className="settings-row-line settings-row-line--stacked">
+                              <label>Name
+                                <input className="control-input" value={selectedStoredFilter.name} onChange={e => updateSelectedStoredFilter({ name: e.target.value })} />
+                              </label>
+                              <label>Filter
+                                <input className="control-input" value={selectedStoredFilter.filter} onChange={e => updateSelectedStoredFilter({ filter: e.target.value })} />
+                              </label>
+                              <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={e => updateSelectedStoredFilter({ isRegex: e.target.checked })} />Regex</label>
+                              <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.caseSensitive} onChange={e => updateSelectedStoredFilter({ caseSensitive: e.target.checked })} />Case sensitive</label>
+                            </div>
+                          ) : (
+                            <div className="empty-state compact-empty-state">Select or create a stored filter.</div>
+                          )}
+                        </section>
+                      )}
+                    </>
+                  ) : (
+                    <div className="empty-state compact-empty-state">Select or create a profile.</div>
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
         </div>
       </div>
     </div>

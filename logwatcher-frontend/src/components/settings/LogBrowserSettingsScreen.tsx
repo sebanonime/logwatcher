@@ -266,7 +266,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
                 </button>
               ))}
             </div>
-            <div className="settings-form-grid">
+            <div className="settings-form-grid settings-form-grid--stacked">
               <label>
                 Name
                 <input className="control-input" value={serverDraft.name} onChange={event => setServerDraft({ ...serverDraft, name: event.target.value })} />

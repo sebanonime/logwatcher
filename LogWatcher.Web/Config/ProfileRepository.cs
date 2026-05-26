@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using System.Xml.Serialization;
 using LogWatcher.Common;
 
@@ -8,6 +9,15 @@ namespace LogWatcher.Web.Config
         private readonly string _folderPath;
         private readonly XmlSerializer _serializer = new(typeof(Profile));
         private readonly object _lock = new();
+
+        // Maps old WinForms XmlCustomSerializer_old1 fully-qualified element names → simple names
+        private static readonly Dictionary<string, string> _oldFormatNameMap = new()
+        {
+            ["LogWatcher.Common.Profile"] = "Profile",
+            ["LogWatcher.Common.Highlighting"] = "Highlighting",
+            ["LogWatcher.Common.HiddenLine"] = "HiddenLine",
+            ["LogWatcher.Common.StoredFilter"] = "StoredFilter",
+        };
 
         public ProfileRepository(IConfiguration config, IWebHostEnvironment env)
         {
@@ -117,8 +127,32 @@ namespace LogWatcher.Web.Config
             }
             catch
             {
-                return null;
+                // Fallback: try old WinForms XmlCustomSerializer_old1 format
+                try { return ReadOldFormatProfile(path); }
+                catch { return null; }
             }
+        }
+
+        // Old format uses fully-qualified type names as element names (e.g. <LogWatcher.Common.Profile>).
+        // Transform those to the simple names that XmlSerializer expects, then deserialize normally.
+        private Profile ReadOldFormatProfile(string path)
+        {
+            var doc = XDocument.Load(path);
+            if (doc.Root == null) return null;
+            TransformOldFormatNames(doc.Root);
+            using var ms = new MemoryStream();
+            doc.Save(ms);
+            ms.Position = 0;
+            using var reader = new StreamReader(ms);
+            return (Profile)_serializer.Deserialize(reader);
+        }
+
+        private static void TransformOldFormatNames(XElement element)
+        {
+            if (_oldFormatNameMap.TryGetValue(element.Name.LocalName, out var newName))
+                element.Name = newName;
+            foreach (var child in element.Elements().ToList())
+                TransformOldFormatNames(child);
         }
 
         private string GetProfilePath(string name)
