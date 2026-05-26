@@ -516,15 +516,17 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                             </label>
                           </div>
                           {selectedStoredFilter ? (
-                            <div className="settings-row-line settings-row-line--stacked">
+                            <div className="settings-form-grid settings-form-grid--stacked">
                               <label>Name
                                 <input className="control-input" value={selectedStoredFilter.name} onChange={e => updateSelectedStoredFilter({ name: e.target.value })} />
                               </label>
                               <label>Filter
                                 <input className="control-input" value={selectedStoredFilter.filter} onChange={e => updateSelectedStoredFilter({ filter: e.target.value })} />
                               </label>
-                              <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={e => updateSelectedStoredFilter({ isRegex: e.target.checked })} />Regex</label>
-                              <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.caseSensitive} onChange={e => updateSelectedStoredFilter({ caseSensitive: e.target.checked })} />Case sensitive</label>
+                              <div className="highlight-flags-row">
+                                <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={e => updateSelectedStoredFilter({ isRegex: e.target.checked })} />Regex</label>
+                                <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.caseSensitive} onChange={e => updateSelectedStoredFilter({ caseSensitive: e.target.checked })} />Case sensitive</label>
+                              </div>
                             </div>
                           ) : (
                             <div className="empty-state compact-empty-state">Select or create a stored filter.</div>

@@ -15,20 +15,24 @@ function argbToCss(argb: number | undefined): string | undefined {
   return `#${rgb.toString(16).padStart(6, '0')}`
 }
 
+function resolveArgb(primary: number | undefined, fallback1: number | undefined, fallback2: number | undefined): number | undefined {
+  for (const v of [primary, fallback1, fallback2]) {
+    if (v !== undefined && v !== 0 && v !== -1) return v
+  }
+  return undefined
+}
+
 function getRuleColor(rule: HighlightingRule, theme: 'dark' | 'light') {
   const defaultBack = 'var(--surface-strong)'
   if (theme === 'dark') {
-    const back = argbToCss(rule.darkBackColorArgb ?? rule.backColorArgb)
     return {
-      foreColor: argbToCss(rule.darkForeColorArgb ?? rule.foreColorArgb),
-      backColor: back ?? defaultBack,
+      foreColor: argbToCss(resolveArgb(rule.darkForeColorArgb, rule.lightForeColorArgb, rule.foreColorArgb)),
+      backColor: argbToCss(resolveArgb(rule.darkBackColorArgb, rule.lightBackColorArgb, rule.backColorArgb)) ?? defaultBack,
     }
   }
-
-  const back = argbToCss(rule.lightBackColorArgb ?? rule.backColorArgb)
   return {
-    foreColor: argbToCss(rule.lightForeColorArgb ?? rule.foreColorArgb),
-    backColor: back ?? defaultBack,
+    foreColor: argbToCss(resolveArgb(rule.lightForeColorArgb, rule.darkForeColorArgb, rule.foreColorArgb)),
+    backColor: argbToCss(resolveArgb(rule.lightBackColorArgb, rule.darkBackColorArgb, rule.backColorArgb)) ?? defaultBack,
   }
 }
 
