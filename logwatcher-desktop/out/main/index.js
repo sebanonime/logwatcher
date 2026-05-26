@@ -51,10 +51,12 @@ function resolveSidecarExe() {
   const candidates = [
     // Packaged app — extracted via electron-builder extraResources
     path.join(electron.app.getPath("exe"), "..", "resources", "sidecar", "LogWatcher.Web.exe"),
-    // Development — Release publish output
-    path.join(electron.app.getAppPath(), "..", "..", "LogWatcher.Web", "bin", "Release", "net8.0", "win-x64", "publish", "LogWatcher.Web.exe"),
-    // Development — Debug build
-    path.join(electron.app.getAppPath(), "..", "..", "LogWatcher.Web", "bin", "Debug", "net8.0", "LogWatcher.Web.exe")
+    // Development — standalone publish output
+    path.join(electron.app.getAppPath(), "..", "..", "publish", "LogWatcher.Web", "LogWatcher.Web.exe"),
+    // Development — Release publish output (net10)
+    path.join(electron.app.getAppPath(), "..", "..", "LogWatcher.Web", "bin", "Release", "net10.0", "win-x64", "publish", "LogWatcher.Web.exe"),
+    // Development — Release publish output (net8)
+    path.join(electron.app.getAppPath(), "..", "..", "LogWatcher.Web", "bin", "Release", "net8.0", "win-x64", "publish", "LogWatcher.Web.exe")
   ];
   return candidates.find(fs.existsSync) ?? null;
 }

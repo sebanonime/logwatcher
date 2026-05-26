@@ -20,10 +20,9 @@
     ],
     "extraResources": [
       {
-        "from": "../LogWatcher.Web/bin/Debug/net8.0",
+        "from": "../publish/LogWatcher.Web",
         "to": "sidecar",
-        "filter": ["**/*"],
-        "fromExists": true
+        "filter": ["**/*"]
       }
     ],
     "win": {
