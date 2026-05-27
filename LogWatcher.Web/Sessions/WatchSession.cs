@@ -48,7 +48,7 @@ namespace LogWatcher.Web.Sessions
             FilePath = filePath;
             _provider = provider;
             _logHub = logHub;
-            _encoding = Encoding.GetEncoding(options.Encoding ?? "UTF-8");
+            _encoding = ResolveEncoding(options.Encoding);
             _openingConnectionId = openingConnectionId;
         }
 
@@ -594,6 +594,14 @@ namespace LogWatcher.Web.Sessions
         {
             yield return bytes.AsMemory();
             await Task.CompletedTask;
+        }
+
+        private static Encoding ResolveEncoding(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+                return Encoding.UTF8;
+            try { return Encoding.GetEncoding(name); }
+            catch { return Encoding.UTF8; }
         }
     }
 }
