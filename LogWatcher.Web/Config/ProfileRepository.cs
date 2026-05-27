@@ -129,17 +129,23 @@ namespace LogWatcher.Web.Config
             {
                 // Fallback: try old WinForms XmlCustomSerializer_old1 format
                 try { return ReadOldFormatProfile(path); }
-                catch { return null; }
+                catch (Exception ex) { return null; }
             }
         }
 
         // Old format uses fully-qualified type names as element names (e.g. <LogWatcher.Common.Profile>).
         // Transform those to the simple names that XmlSerializer expects, then deserialize normally.
+        // Also normalizes boolean values: WinForms serializer outputs "True"/"False" (Pascal case)
+        // but XmlSerializer requires XSD booleans "true"/"false" (lowercase).
         private Profile ReadOldFormatProfile(string path)
         {
-            var doc = XDocument.Load(path);
+            // WinForms serializer writes with Encoding.Default (ANSI) but declares encoding="utf-16".
+            // Reading as text first avoids the byte-stream encoding mismatch in XDocument.Load.
+            var content = File.ReadAllText(path, System.Text.Encoding.Default);
+            var doc = XDocument.Parse(content);
             if (doc.Root == null) return null;
             TransformOldFormatNames(doc.Root);
+            NormalizeLegacyBooleans(doc.Root);
             using var ms = new MemoryStream();
             doc.Save(ms);
             ms.Position = 0;
@@ -153,6 +159,20 @@ namespace LogWatcher.Web.Config
                 element.Name = newName;
             foreach (var child in element.Elements().ToList())
                 TransformOldFormatNames(child);
+        }
+
+        private static void NormalizeLegacyBooleans(XElement element)
+        {
+            if (!element.HasElements)
+            {
+                if (element.Value == "True") element.Value = "true";
+                else if (element.Value == "False") element.Value = "false";
+            }
+            else
+            {
+                foreach (var child in element.Elements())
+                    NormalizeLegacyBooleans(child);
+            }
         }
 
         private string GetProfilePath(string name)

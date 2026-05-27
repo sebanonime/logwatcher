@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-16"?>
+<LogWatcher.Common.Profile>
+  <Name>Test</Name>
+  <LoadingParam />
+  <DicoHighLighting>
+    <LogWatcher.Common.Highlighting>
+      <Order>1</Order>
+      <Text>coucou</Text>
+      <ForeColorArgb>-32704</ForeColorArgb>
+      <BackColorArgb>-8388608</BackColorArgb>
+      <Bold>False</Bold>
+      <HightPriority>False</HightPriority>
+      <CaseSensitive>False</CaseSensitive>
+      <IsRegex>False</IsRegex>
+    </LogWatcher.Common.Highlighting>
+  </DicoHighLighting>
+  <DicoHiddenLog />
+  <DicoStoredFilter />
+</LogWatcher.Common.Profile>

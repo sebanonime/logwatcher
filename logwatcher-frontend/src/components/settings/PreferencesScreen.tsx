@@ -186,10 +186,10 @@ function HighlightListEditor({ title, rules, onChange }: {
                   canClear={isColorSet(selectedRule.darkForeColorArgb)}
                   onClear={() => updateRule(selectedIndex!, { darkForeColorArgb: -1, foreColorArgb: -1 })} />
                 <span className="highlight-theme-field-label">Background</span>
-                <ColorSwatch value={selectedRule.darkBackColorArgb || undefined} fallback="#1b2533"
+                <ColorSwatch value={selectedRule.darkBackColorArgb || selectedRule.backColorArgb || undefined} fallback="#1b2533"
                   title="Dark theme background (empty = none)"
-                  onChange={v => updateRule(selectedIndex!, { darkBackColorArgb: v })}
-                  canClear onClear={() => updateRule(selectedIndex!, { darkBackColorArgb: 0 })} />
+                  onChange={v => updateRule(selectedIndex!, { darkBackColorArgb: v, backColorArgb: v })}
+                  canClear onClear={() => updateRule(selectedIndex!, { darkBackColorArgb: 0, backColorArgb: 0 })} />
               </div>
               <div className="highlight-theme-cell highlight-theme-cell--light">
                 <span className="highlight-theme-badge">◐</span>
@@ -227,7 +227,7 @@ function HighlightListEditor({ title, rules, onChange }: {
                 <span className="highlight-preview-label" title={!darkHasFore ? 'No dark colors — using fallback' : undefined}>{darkHasFore ? '◑' : '~◑'}</span>
                 <span className="highlight-preview-text" style={{
                   color: resolveColor(rule.darkForeColorArgb, rule.lightForeColorArgb, rule.foreColorArgb, '#ffffff'),
-                  backgroundColor: resolveColor(rule.darkBackColorArgb, rule.lightBackColorArgb, undefined, 'transparent'),
+                  backgroundColor: resolveColor(rule.darkBackColorArgb, rule.lightBackColorArgb, rule.backColorArgb, 'transparent'),
                   fontWeight: rule.bold ? 'bold' : undefined,
                 }}>{rule.text || 'Sample text'}</span>
               </div>
@@ -235,7 +235,7 @@ function HighlightListEditor({ title, rules, onChange }: {
                 <span className="highlight-preview-label" title={!lightHasFore ? 'No light colors — using fallback' : undefined}>{lightHasFore ? '◐' : '~◐'}</span>
                 <span className="highlight-preview-text" style={{
                   color: resolveColor(rule.lightForeColorArgb, rule.darkForeColorArgb, rule.foreColorArgb, '#000000'),
-                  backgroundColor: resolveColor(rule.lightBackColorArgb, rule.darkBackColorArgb, undefined, 'transparent'),
+                  backgroundColor: resolveColor(rule.lightBackColorArgb, rule.darkBackColorArgb, rule.backColorArgb, 'transparent'),
                   fontWeight: rule.bold ? 'bold' : undefined,
                 }}>{rule.text || 'Sample text'}</span>
               </div>
