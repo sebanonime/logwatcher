@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+option csharp_namespace = "LogWatcher.Grpc";
+
+package agent;
+
+// Bidirectional streaming service: agent connects to backend and keeps the stream open.
+// Backend sends commands; agent sends responses.
+service AgentGateway {
+  rpc Connect (stream AgentMessage) returns (stream BackendMessage);
+}
+
+// ── Agent → Backend ─────────────────────────────────────────────────────────
+
+message AgentMessage {
+  oneof payload {
+    RegisterMsg         register          = 1;
+    PushLinesMsg        push_lines        = 2;
+    PushRequestedLines  push_requested    = 3;
+    PushFileInfoMsg     push_file_info    = 4;
+    PushFileListMsg     push_file_list    = 5;
+    PushErrorMsg        push_error        = 6;
+    PushFilterResultMsg push_filter       = 7;
+    PushSearchResultMsg push_search       = 8;
+  }
+}
+
+message RegisterMsg {
+  string agent_id    = 1;
+  string hostname    = 2;
+  repeated string capabilities = 3;
+}
+
+message PushLinesMsg {
+  string   session_id      = 1;
+  repeated string lines    = 2;
+  repeated int64  offsets  = 3;
+  bool is_initial_load     = 4;
+  bool is_reset            = 5;
+}
+
+message PushRequestedLines {
+  string   session_id      = 1;
+  int32    start_line      = 2;
+  repeated string lines    = 3;
+}
+
+message PushFileInfoMsg {
+  string request_id  = 1;
+  int64  size_bytes  = 2;
+  bool   exists      = 3;
+}
+
+message FileEntry {
+  string path          = 1;
+  bool   is_directory  = 2;
+  int64  size_bytes    = 3;
+  string last_modified = 4;
+  bool   has_children  = 5;
+}
+
+message PushFileListMsg {
+  string          request_id = 1;
+  repeated FileEntry files   = 2;
+}
+
+message PushErrorMsg {
+  string session_id = 1;
+  string message    = 2;
+}
+
+message PushFilterResultMsg {
+  string   request_id              = 1;
+  string   session_id              = 2;
+  repeated int32 matching_lines    = 3;
+}
+
+message PushSearchResultMsg {
+  string          request_id      = 1;
+  repeated string matching_paths  = 2;
+}
+
+// ── Backend → Agent ─────────────────────────────────────────────────────────
+
+message BackendMessage {
+  oneof payload {
+    WatchFileCmd      watch_file    = 1;
+    StopWatchCmd      stop_watch    = 2;
+    GetFileInfoCmd    get_file_info = 3;
+    ListFilesCmd      list_files    = 4;
+    RequestLinesCmd   request_lines = 5;
+    BuildFilterCmd    build_filter  = 6;
+    SearchFilesCmd    search_files  = 7;
+  }
+}
+
+message WatchFileCmd {
+  string session_id      = 1;
+  string file_path       = 2;
+  int64  from_offset     = 3;
+  string encoding        = 4;
+}
+
+message StopWatchCmd {
+  string session_id = 1;
+}
+
+message GetFileInfoCmd {
+  string request_id = 1;
+  string file_path  = 2;
+}
+
+message ListFilesCmd {
+  string request_id = 1;
+  string directory  = 2;
+  string pattern    = 3;
+}
+
+message RequestLinesCmd {
+  string session_id  = 1;
+  int32  start_line  = 2;
+  int32  count       = 3;
+}
+
+message HiddenLineRule {
+  string text           = 1;
+  bool   is_regex       = 2;
+  bool   case_sensitive = 3;
+  bool   is_active      = 4;
+}
+
+message BuildFilterCmd {
+  string   request_id    = 1;
+  string   session_id    = 2;
+  string   pattern       = 3;
+  bool     is_regex      = 4;
+  bool     case_sensitive = 5;
+  repeated HiddenLineRule hidden_rules = 6;
+}
+
+message SearchFilesCmd {
+  string request_id     = 1;
+  string directory      = 2;
+  string pattern        = 3;
+  bool   is_regex       = 4;
+  string name_filter    = 5;
+}

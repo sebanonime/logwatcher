@@ -15,7 +15,7 @@ IHost host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         services.AddSingleton<AgentLineIndex>();
-        services.AddSingleton<AgentHubConnection>();
+        services.AddTransient<AgentGrpcClient>();
         services.AddHostedService<AgentWorker>();
     })
     .ConfigureLogging(logging =>

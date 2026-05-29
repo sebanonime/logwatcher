@@ -208,6 +208,10 @@ namespace LogWatcher.Web.Sessions
 
         public async Task<LineDto[]> ReadLinesAsync(int startLine, int count, CancellationToken ct = default)
         {
+            // Agent sources serve lines via RequestLines/PushRequestedLines (no raw byte access)
+            var agentLines = await _provider.ReadLinesByNumberAsync(SessionId, startLine, count, ct);
+            if (agentLines != null) return agentLines;
+
             var (offsets, actual) = _index.GetRange(startLine, count);
             if (actual == 0) return Array.Empty<LineDto>();
 
@@ -547,7 +551,19 @@ namespace LogWatcher.Web.Sessions
                     .ToList();
 
                 var progress = _logHub.Clients.Group(SessionId);
-                var newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
+                FilteredLineIndex newFilter;
+
+                var agentLines = await _provider.BuildFilterAsync(options, SessionId, ct);
+                if (agentLines != null)
+                {
+                    newFilter = new FilteredLineIndex();
+                    foreach (var ln in agentLines)
+                        newFilter.Add(ln);
+                }
+                else
+                {
+                    newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
+                }
 
                 Volatile.Write(ref _filter, newFilter);
                 Interlocked.Increment(ref _viewVersion);

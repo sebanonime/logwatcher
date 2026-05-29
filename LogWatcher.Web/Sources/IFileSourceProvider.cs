@@ -44,5 +44,26 @@ namespace LogWatcher.Web.Sources
         /// <summary>Directory listing for the file browser UI.</summary>
         Task<IEnumerable<RemoteFileInfoDto>> ListFilesAsync(
             string directory, string pattern, CancellationToken ct = default);
+
+        /// <summary>
+        /// Reads lines by line number. Returns null if not supported (falls back to byte-range reads).
+        /// Agent sources implement this via RequestLines to avoid raw byte transfers.
+        /// </summary>
+        Task<LineDto[]?> ReadLinesByNumberAsync(string sessionId, int startLine, int count, CancellationToken ct)
+            => Task.FromResult<LineDto[]?>(null);
+
+        /// <summary>
+        /// Builds a filter index on the source side. Returns null if not supported (falls back to stream scan).
+        /// Agent sources implement this to avoid transmitting the full file to the backend.
+        /// </summary>
+        Task<int[]?> BuildFilterAsync(FilterOptionsDto options, string sessionId, CancellationToken ct)
+            => Task.FromResult<int[]?>(null);
+
+        /// <summary>
+        /// Searches file contents on the source side. Returns null if not supported (falls back to per-file ReadRawAsync).
+        /// Agent sources implement this to avoid transmitting file bytes to the backend.
+        /// </summary>
+        Task<string[]?> SearchFilesAsync(string directory, string nameFilter, string pattern, bool isRegex, CancellationToken ct)
+            => Task.FromResult<string[]?>(null);
     }
 }

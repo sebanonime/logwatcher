@@ -26,17 +26,14 @@ namespace LogWatcher.Web.Hubs
         private readonly ServerConfigRepository _serverConfig;
         private readonly CredentialStore _credentials;
         private readonly IAgentRegistry _agentRegistry;
-        private readonly IHubContext<AgentHub> _agentHub;
 
         public LogHub(WatchSessionManager sessions, ServerConfigRepository serverConfig,
-            CredentialStore credentials, IAgentRegistry agentRegistry,
-            IHubContext<AgentHub> agentHub)
+            CredentialStore credentials, IAgentRegistry agentRegistry)
         {
             _sessions = sessions;
             _serverConfig = serverConfig;
             _credentials = credentials;
             _agentRegistry = agentRegistry;
-            _agentHub = agentHub;
         }
 
         public async Task OpenLog(string sessionId, string serverId, string filePath, OpenLogOptionsDto options)
@@ -85,7 +82,7 @@ namespace LogWatcher.Web.Hubs
                 IFileSourceProvider provider = server.Type switch
                 {
                     "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
-                    "agent" => new AgentFileSourceProvider(server, _agentRegistry, _agentHub),
+                    "agent" => new AgentFileSourceProvider(server, _agentRegistry),
                     _ => null
                 };
                 if (provider == null) continue;
@@ -147,46 +144,6 @@ namespace LogWatcher.Web.Hubs
             string nameFilter, string contentPattern, bool isRegex)
         {
             var servers = _serverConfig.GetServersInRoot(perimeterId, rootFolderName);
-            var allFiles = new List<(RemoteFileInfoDto File, IFileSourceProvider Provider)>();
-
-            // Collect candidate files from all servers
-            foreach (var server in servers)
-            {
-                IFileSourceProvider provider = server.Type switch
-                {
-                    "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
-                    "agent" => new AgentFileSourceProvider(server, _agentRegistry, _agentHub),
-                    _ => null
-                };
-                if (provider == null) continue;
-
-                try
-                {
-                    var basePath = server.Host ?? string.Empty;
-                    var dirPath = string.IsNullOrEmpty(subpath)
-                        ? basePath
-                        : Path.Combine(basePath, subpath).Replace('\\', '/');
-
-                    var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
-                    foreach (var item in items)
-                    {
-                        item.ServerId = server.Id;
-                        item.SourceName = server.Name;
-                    }
-                    var candidates = items.Where(i => !i.IsDirectory).ToList();
-
-                    // Apply name filter if provided
-                    if (!string.IsNullOrWhiteSpace(nameFilter))
-                        candidates = candidates.Where(f =>
-                            Path.GetFileName(f.Path).Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-
-                    allFiles.AddRange(candidates.Select(f => (f, provider)));
-                }
-                catch { /* skip unreachable */ }
-            }
-
-            int total = allFiles.Count;
-            int scanned = 0;
             var matches = new List<RemoteFileInfoDto>();
             var nameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -197,9 +154,66 @@ namespace LogWatcher.Web.Hubs
                 catch { regex = null; }
             }
 
+            // For agent servers, delegate search to agent to avoid full file transfer.
+            // For local/SMB servers, collect files and scan individually.
+            var localFiles = new List<(RemoteFileInfoDto File, IFileSourceProvider Provider)>();
+            var agentProviders = new List<IFileSourceProvider>();
+
+            foreach (var server in servers)
+            {
+                IFileSourceProvider provider = server.Type switch
+                {
+                    "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
+                    "agent" => new AgentFileSourceProvider(server, _agentRegistry),
+                    _ => null
+                };
+                if (provider == null) continue;
+
+                var basePath = server.Host ?? string.Empty;
+                var dirPath = string.IsNullOrEmpty(subpath)
+                    ? basePath
+                    : Path.Combine(basePath, subpath).Replace('\\', '/');
+
+                try
+                {
+                    // If provider supports remote search (agent), delegate entirely
+                    var remotePaths = await provider.SearchFilesAsync(dirPath, nameFilter, contentPattern, isRegex, CancellationToken.None);
+                    if (remotePaths != null)
+                    {
+                        agentProviders.Add(provider);
+                        foreach (var path in remotePaths)
+                        {
+                            var fname = Path.GetFileName(path);
+                            if (nameSet.Add(fname))
+                                matches.Add(new RemoteFileInfoDto
+                                {
+                                    Path = path,
+                                    IsDirectory = false,
+                                    ServerId = server.Id,
+                                    SourceName = server.Name,
+                                    LastModified = DateTimeOffset.UtcNow,
+                                });
+                        }
+                        continue;
+                    }
+
+                    // Local/SMB: collect candidate files for per-file scan
+                    var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
+                    foreach (var item in items) { item.ServerId = server.Id; item.SourceName = server.Name; }
+                    var candidates = items.Where(i => !i.IsDirectory).ToList();
+                    if (!string.IsNullOrWhiteSpace(nameFilter))
+                        candidates = candidates.Where(f =>
+                            Path.GetFileName(f.Path).Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+                    localFiles.AddRange(candidates.Select(f => (f, provider)));
+                }
+                catch { /* skip unreachable servers */ }
+            }
+
+            int total = localFiles.Count;
+            int scanned = 0;
             await Clients.Caller.SendAsync("OnSearchProgress", 0, total);
 
-            foreach (var (file, provider) in allFiles)
+            foreach (var (file, provider) in localFiles)
             {
                 try
                 {
@@ -220,8 +234,9 @@ namespace LogWatcher.Web.Hubs
                 }
             }
 
-            // Dispose all providers
-            foreach (var (_, provider) in allFiles.GroupBy(x => x.Provider).Select(g => g.First()))
+            foreach (var (_, provider) in localFiles.GroupBy(x => x.Provider).Select(g => g.First()))
+                await provider.DisposeAsync();
+            foreach (var provider in agentProviders)
                 await provider.DisposeAsync();
 
             return matches

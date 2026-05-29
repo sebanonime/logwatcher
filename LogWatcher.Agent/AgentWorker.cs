@@ -1,20 +1,20 @@
 namespace LogWatcher.Agent;
 
 /// <summary>
-/// Reconnect loop: connects to AgentHub, re-registers on reconnect, keeps alive.
+/// Reconnect loop: connects to backend gRPC AgentGateway, re-registers on reconnect.
 /// Retry delays: 0, 2, 5, 10, 30 seconds.
 /// </summary>
 public class AgentWorker : BackgroundService
 {
-    private readonly AgentHubConnection _hub;
     private readonly ILogger<AgentWorker> _log;
+    private readonly IServiceProvider _services;
 
     private static readonly int[] RetryDelaysMs = [0, 2000, 5000, 10000, 30000];
 
-    public AgentWorker(AgentHubConnection hub, ILogger<AgentWorker> log)
+    public AgentWorker(ILogger<AgentWorker> log, IServiceProvider services)
     {
-        _hub = hub;
         _log = log;
+        _services = services;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -23,16 +23,13 @@ public class AgentWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Create a fresh client each reconnect so gRPC channel state is clean
+            await using var client = _services.GetRequiredService<AgentGrpcClient>();
             try
             {
                 _log.LogInformation("Connecting to backend (attempt {Attempt})…", attempt + 1);
-                await _hub.StartAsync(stoppingToken);
-
-                _log.LogInformation("Connected. Agent is running.");
+                await client.StartAsync(stoppingToken);
                 attempt = 0;
-
-                // Block until disconnected or cancelled
-                await _hub.WaitForDisconnectAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -51,7 +48,5 @@ public class AgentWorker : BackgroundService
             _log.LogInformation("Retrying in {Delay}ms…", delayMs);
             await Task.Delay(delayMs, stoppingToken);
         }
-
-        await _hub.StopAsync();
     }
 }

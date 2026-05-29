@@ -166,9 +166,7 @@ export function MainToolbar({
 
     setIsFiltering(true)
     try {
-      addEntry(selectedFilter.filter.trim())
       await hub.invoke('SetFilter', activeSessionId, filter)
-      clearBuffer(activeSessionId)
       updateTab(activeSessionId, {
         isFiltered: true,
         filterPattern: selectedFilter.filter,
@@ -179,7 +177,7 @@ export function MainToolbar({
     } finally {
       setIsFiltering(false)
     }
-  }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, addEntry, onFilterApplied])
+  }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, onFilterApplied])
 
   const applyFilter = useCallback(async () => {
     if (!activeSessionId) return
@@ -412,15 +410,11 @@ export function MainToolbar({
         void clearFilter()
         return
       }
-      if (event.ctrlKey && (event.key === 'r' || event.key === 'R')) {
-        event.preventDefault()
-        void showContext()
-      }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [searchNext, clearFilter, showContext, activeTab?.isFiltered])
+  }, [searchNext, clearFilter, activeTab?.isFiltered])
 
   return (
     <header className="chrome-bar">
@@ -522,7 +516,7 @@ export function MainToolbar({
 
         <div className="toolbar-status-cluster">
           {activeTab && (
-            <button onClick={showContext} className="control-button control-button--ghost toolbar-action-button" title="Show context (Ctrl+R)">
+            <button onClick={showContext} className="control-button control-button--ghost toolbar-action-button" title="Show context">
               ☰
             </button>
           )}

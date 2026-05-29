@@ -1,3 +1,4 @@
+using LogWatcher.Grpc;
 using LogWatcher.Web.Dto;
 using System.Collections.Concurrent;
 
@@ -5,60 +6,53 @@ namespace LogWatcher.Web.Services
 {
     public class AgentRegistry : IAgentRegistry
     {
-        private readonly ConcurrentDictionary<string, AgentInfo> _byAgentId = new();
-        private readonly ConcurrentDictionary<string, string> _connectionToAgent = new();
+        private record RegisteredAgent(AgentInfo Info, Func<BackendMessage, Task> Sender);
 
-        // Pending request/response slots
+        private readonly ConcurrentDictionary<string, RegisteredAgent> _agents = new();
+
         private readonly ConcurrentDictionary<string, TaskCompletionSource<(long, bool)>> _fileInfoRequests = new();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<RemoteFileInfoDto[]>> _listRequests = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<int[]>> _filterRequests = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<string[]>> _searchRequests = new();
 
-        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<string[]>> _pageRequests = new();
 
-        public void Register(string agentId, string connectionId, string hostname, string[] capabilities)
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+
+        public void Register(string agentId, string hostname, string[] capabilities, Func<BackendMessage, Task> sender)
         {
-            var info = new AgentInfo(agentId, connectionId, hostname, capabilities, DateTimeOffset.UtcNow);
-            _byAgentId[agentId] = info;
-            _connectionToAgent[connectionId] = agentId;
+            var info = new AgentInfo(agentId, hostname, capabilities, DateTimeOffset.UtcNow);
+            _agents[agentId] = new RegisteredAgent(info, sender);
         }
 
-        public void Unregister(string agentId)
-        {
-            if (_byAgentId.TryRemove(agentId, out var info))
-                _connectionToAgent.TryRemove(info.ConnectionId, out _);
-        }
+        public void Unregister(string agentId) => _agents.TryRemove(agentId, out _);
 
-        public bool TryGetConnectionId(string agentId, out string connectionId)
-        {
-            if (_byAgentId.TryGetValue(agentId, out var info))
-            {
-                connectionId = info.ConnectionId;
-                return true;
-            }
-            connectionId = null;
-            return false;
-        }
-
-        public string GetAgentIdByConnectionId(string connectionId)
-        {
-            _connectionToAgent.TryGetValue(connectionId, out var agentId);
-            return agentId;
-        }
+        public bool IsConnected(string agentId) => _agents.ContainsKey(agentId);
 
         public IReadOnlyList<AgentInfo> GetAll() =>
-            _byAgentId.Values.ToList().AsReadOnly();
+            _agents.Values.Select(a => a.Info).ToList().AsReadOnly();
 
-        // ── File info request ──────────────────────────────────────────────
+        public Task SendAsync(string agentId, BackendMessage message, CancellationToken ct = default)
+        {
+            if (_agents.TryGetValue(agentId, out var agent))
+                return agent.Sender(message);
+            return Task.CompletedTask;
+        }
+
+        // ── File info ──────────────────────────────────────────────────────
 
         public async Task<(long SizeBytes, bool Exists)> SendFileInfoRequestAsync(
-            string agentConnectionId, string filePath,
-            Func<string, string, Task> sender, CancellationToken ct)
+            string agentId, string filePath, CancellationToken ct)
         {
             var requestId = Guid.NewGuid().ToString("N");
             var tcs = new TaskCompletionSource<(long, bool)>();
             _fileInfoRequests[requestId] = tcs;
             try
             {
-                await sender(requestId, filePath);
+                await SendAsync(agentId, new BackendMessage
+                {
+                    GetFileInfo = new GetFileInfoCmd { RequestId = requestId, FilePath = filePath }
+                }, ct);
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(RequestTimeout);
                 cts.Token.Register(() => tcs.TrySetCanceled());
@@ -77,18 +71,20 @@ namespace LogWatcher.Web.Services
             return Task.CompletedTask;
         }
 
-        // ── File list request ──────────────────────────────────────────────
+        // ── File list ──────────────────────────────────────────────────────
 
         public async Task<RemoteFileInfoDto[]> SendListFilesRequestAsync(
-            string agentConnectionId, string directory, string pattern,
-            Func<string, string, string, Task> sender, CancellationToken ct)
+            string agentId, string directory, string pattern, CancellationToken ct)
         {
             var requestId = Guid.NewGuid().ToString("N");
             var tcs = new TaskCompletionSource<RemoteFileInfoDto[]>();
             _listRequests[requestId] = tcs;
             try
             {
-                await sender(requestId, directory, pattern);
+                await SendAsync(agentId, new BackendMessage
+                {
+                    ListFiles = new ListFilesCmd { RequestId = requestId, Directory = directory, Pattern = pattern }
+                }, ct);
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(RequestTimeout);
                 cts.Token.Register(() => tcs.TrySetCanceled());
@@ -104,6 +100,96 @@ namespace LogWatcher.Web.Services
         {
             if (_listRequests.TryGetValue(requestId, out var tcs))
                 tcs.TrySetResult(files);
+            return Task.CompletedTask;
+        }
+
+        // ── Filter ────────────────────────────────────────────────────────
+
+        public async Task<int[]> SendFilterRequestAsync(
+            string agentId, string requestId, BuildFilterCmd cmd, CancellationToken ct)
+        {
+            var tcs = new TaskCompletionSource<int[]>();
+            _filterRequests[requestId] = tcs;
+            try
+            {
+                await SendAsync(agentId, new BackendMessage { BuildFilter = cmd }, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(RequestTimeout);
+                cts.Token.Register(() => tcs.TrySetCanceled());
+                return await tcs.Task;
+            }
+            finally
+            {
+                _filterRequests.TryRemove(requestId, out _);
+            }
+        }
+
+        public Task CompleteFilterRequestAsync(string requestId, int[] matchingLines)
+        {
+            if (_filterRequests.TryGetValue(requestId, out var tcs))
+                tcs.TrySetResult(matchingLines);
+            return Task.CompletedTask;
+        }
+
+        // ── Content search ────────────────────────────────────────────────
+
+        public async Task<string[]> SendSearchRequestAsync(
+            string agentId, SearchFilesCmd cmd, CancellationToken ct)
+        {
+            var requestId = Guid.NewGuid().ToString("N");
+            cmd.RequestId = requestId;
+            var tcs = new TaskCompletionSource<string[]>();
+            _searchRequests[requestId] = tcs;
+            try
+            {
+                await SendAsync(agentId, new BackendMessage { SearchFiles = cmd }, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(RequestTimeout);
+                cts.Token.Register(() => tcs.TrySetCanceled());
+                return await tcs.Task;
+            }
+            finally
+            {
+                _searchRequests.TryRemove(requestId, out _);
+            }
+        }
+
+        public Task CompleteSearchRequestAsync(string requestId, string[] matchingPaths)
+        {
+            if (_searchRequests.TryGetValue(requestId, out var tcs))
+                tcs.TrySetResult(matchingPaths);
+            return Task.CompletedTask;
+        }
+
+        // ── Page request ──────────────────────────────────────────────────
+
+        public async Task<string[]> SendPageRequestAsync(
+            string agentId, string sessionId, int startLine, int count, CancellationToken ct)
+        {
+            var key = $"{sessionId}:{startLine}";
+            var tcs = new TaskCompletionSource<string[]>();
+            _pageRequests[key] = tcs;
+            try
+            {
+                await SendAsync(agentId, new BackendMessage
+                {
+                    RequestLines = new RequestLinesCmd { SessionId = sessionId, StartLine = startLine, Count = count }
+                }, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(RequestTimeout);
+                cts.Token.Register(() => tcs.TrySetCanceled());
+                return await tcs.Task;
+            }
+            finally
+            {
+                _pageRequests.TryRemove(key, out _);
+            }
+        }
+
+        public Task CompletePageRequestAsync(string requestKey, string[] lines)
+        {
+            if (_pageRequests.TryGetValue(requestKey, out var tcs))
+                tcs.TrySetResult(lines);
             return Task.CompletedTask;
         }
     }

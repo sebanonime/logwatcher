@@ -25,4 +25,17 @@
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" Version="2.67.*" />
+    <PackageReference Include="Google.Protobuf" Version="3.29.*" />
+    <PackageReference Include="Grpc.Tools" Version="2.67.*">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\agent.proto" GrpcServices="Client" />
+  </ItemGroup>
 </Project>

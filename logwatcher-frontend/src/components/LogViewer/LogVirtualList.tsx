@@ -33,6 +33,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const wasNearBottomRef = useRef(true)
   const previousSelectedLineRef = useRef<number | null>(null)
   const togglingTailRef = useRef(false)
+  const suppressScrollRef = useRef(false)
 
   const virtualizer = useVirtualizer({
     count: totalLines,
@@ -109,12 +110,35 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     previousSelectedLineRef.current = selected
     if (!hasChanged) return
 
+    if (suppressScrollRef.current) {
+      suppressScrollRef.current = false
+      return
+    }
+
     const firstVisible = virtualItems[0]?.index ?? 0
     const lastVisible = virtualItems[virtualItems.length - 1]?.index ?? -1
     if (selected < firstVisible || selected > lastVisible) {
       virtualizer.scrollToIndex(selected, { align: 'center' })
     }
   }, [selectedLine?.lineNumber, totalLines, virtualItems, virtualizer])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+      const target = event.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
+      const current = getSelectedLine(sessionId)
+      if (current === null) return
+      event.preventDefault()
+      const next = event.key === 'ArrowUp' ? current.lineNumber - 1 : current.lineNumber + 1
+      if (next < 0 || next >= totalLines) return
+      suppressScrollRef.current = true
+      const text = getLineText(next)
+      setSelectedLine(sessionId, { lineNumber: next, text: text ?? '' })
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine])
 
   return (
     <div

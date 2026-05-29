@@ -22,7 +22,10 @@ builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
 builder.Services.AddSingleton<WatchSessionManager>();
 
-// ── SignalR ────────────────────────────────────────────────────────────────
+// ── gRPC (agent ↔ backend) ────────────────────────────────────────────────
+builder.Services.AddGrpc();
+
+// ── SignalR (browser ↔ backend) ───────────────────────────────────────────
 builder.Services.AddSignalR(opts =>
 {
     opts.MaximumReceiveMessageSize = 1024 * 1024; // 1 MB
@@ -56,7 +59,7 @@ authProvider.ConfigurePipeline(app);
 
 app.MapControllers();
 app.MapHub<LogHub>("/logHub");
-app.MapHub<AgentHub>("/agentHub");
+app.MapGrpcService<AgentGrpcService>();
 
 // Serve React frontend static files in production
 app.UseDefaultFiles();

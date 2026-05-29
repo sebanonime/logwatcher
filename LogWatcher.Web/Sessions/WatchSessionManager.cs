@@ -18,7 +18,6 @@ namespace LogWatcher.Web.Sessions
         // Tracks which connections belong to which sessions (for cleanup on disconnect)
         private readonly ConcurrentDictionary<string, HashSet<string>> _connectionSessions = new();
         private readonly IHubContext<LogHub> _logHub;
-        private readonly IHubContext<AgentHub> _agentHub;
         private readonly ServerConfigRepository _servers;
         private readonly CredentialStore _credentials;
         private readonly IAgentRegistry _agentRegistry;
@@ -26,14 +25,12 @@ namespace LogWatcher.Web.Sessions
 
         public WatchSessionManager(
             IHubContext<LogHub> logHub,
-            IHubContext<AgentHub> agentHub,
             ServerConfigRepository servers,
             CredentialStore credentials,
             IAgentRegistry agentRegistry,
             ProfileRepository profiles)
         {
             _logHub = logHub;
-            _agentHub = agentHub;
             _servers = servers;
             _credentials = credentials;
             _agentRegistry = agentRegistry;
@@ -61,7 +58,7 @@ namespace LogWatcher.Web.Sessions
             IFileSourceProvider provider = server.Type switch
             {
                 "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
-                "agent" => new AgentFileSourceProvider(server, _agentRegistry, _agentHub),
+                "agent" => new AgentFileSourceProvider(server, _agentRegistry, sessionId),
                 _ => null
             };
 
@@ -170,8 +167,8 @@ namespace LogWatcher.Web.Sessions
 
         public Task HandleAgentPageAsync(string sessionId, int startLine, string[] lines)
         {
-            // Resolve which browser connection(s) are waiting for this page — future enhancement
-            return Task.CompletedTask;
+            var key = $"{sessionId}:{startLine}";
+            return _agentRegistry.CompletePageRequestAsync(key, lines);
         }
 
         public Task HandleAgentErrorAsync(string sessionId, string error)

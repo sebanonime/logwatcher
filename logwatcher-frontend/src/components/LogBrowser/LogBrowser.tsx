@@ -282,12 +282,22 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                   <div className="section-subtitle">Double-click to open</div>
                 </div>
                 <div className="browser-files-filter-row">
-                  <input
-                    className="control-input browser-files-filter"
-                    placeholder="Filter by name…"
-                    value={filesFilter}
-                    onChange={e => { setFilesFilter(e.target.value); clearSearchResults() }}
-                  />
+                  <div className="browser-files-filter-wrap">
+                    <input
+                      className="control-input browser-files-filter"
+                      placeholder="Filter by name…"
+                      value={filesFilter}
+                      onChange={e => { setFilesFilter(e.target.value); clearSearchResults() }}
+                    />
+                    {filesFilter && (
+                      <button
+                        className="browser-files-filter-clear"
+                        onClick={() => { setFilesFilter(''); clearSearchResults() }}
+                        title="Clear filter"
+                        aria-label="Clear filter"
+                      >×</button>
+                    )}
+                  </div>
                   <div className="browser-search-popup-anchor">
                     <button
                       className={`control-button ${showSearchPopup || contentSearchResults !== null ? 'control-button--primary' : 'control-button--ghost'} browser-search-toggle`}

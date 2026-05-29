@@ -504,7 +504,35 @@ select {
 }
 
 .browser-files-filter {
-  width: min(120px, 100%);
+  width: min(200px, 100%);
+}
+
+.browser-files-filter-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.browser-files-filter-wrap .browser-files-filter {
+  padding-right: 20px;
+}
+
+.browser-files-filter-clear {
+  position: absolute;
+  right: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+}
+
+.browser-files-filter-clear:hover {
+  color: var(--text-1);
 }
 
 .browser-inline-filter {
@@ -1160,7 +1188,7 @@ select {
 }
 
 .context-modal__body {
-  overflow-y: auto;
+  overflow: auto;
   max-height: 70vh;
   padding: 6px 0;
   font-family: var(--user-font-family), var(--font-mono);
@@ -1177,8 +1205,8 @@ select {
 }
 
 .context-modal__line-text {
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
+  word-break: normal;
 }
 
 .settings-screen {
@@ -1703,6 +1731,8 @@ select {
   display: flex;
   align-items: center;
   gap: 4px;
+  justify-content: flex-end;
+}
 }
 
 .browser-search-toggle {
