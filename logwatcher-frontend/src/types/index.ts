@@ -41,7 +41,7 @@ export interface OpenLogOptionsDto {
 export interface ServerDto {
   id: string
   name: string
-  type: 'local' | 'smb' | 'agent'
+  type: 'smb' | 'agent'
   host?: string
   agentId?: string
   username?: string

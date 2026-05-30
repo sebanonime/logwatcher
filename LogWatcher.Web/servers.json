@@ -9,7 +9,7 @@
           {
             "Id": "local1",
             "Name": "Local 1",
-            "Type": "local",
+            "Type": "smb",
             "Host": "C:\\TestLog\\TestLog1",
             "AgentId": null,
             "Username": null
@@ -17,7 +17,7 @@
           {
             "Id": "local",
             "Name": "Local 2",
-            "Type": "local",
+            "Type": "smb",
             "Host": "C:\\TestLog\\TestLog2",
             "AgentId": null,
             "Username": null
@@ -25,7 +25,7 @@
           {
             "Id": "9f17e53e",
             "Name": "LogFile",
-            "Type": "local",
+            "Type": "smb",
             "Host": "C:\\TestLog\\TestLogFile",
             "AgentId": "",
             "Username": ""

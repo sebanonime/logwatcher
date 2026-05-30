@@ -205,8 +205,10 @@ namespace LogWatcher.Web.Config
                     if (first.TryGetProperty("rootFolders", out _) ||
                         first.TryGetProperty("RootFolders", out _))
                     {
-                        return JsonSerializer.Deserialize<List<PerimeterDefinition>>(json, _jsonOpts)
-                               ?? Seed();
+                        var perimeters = JsonSerializer.Deserialize<List<PerimeterDefinition>>(json, _jsonOpts)
+                                         ?? Seed();
+                        MigrateLocalToSmb(perimeters);
+                        return perimeters;
                     }
                     else
                     {
@@ -239,7 +241,7 @@ namespace LogWatcher.Web.Config
                             Name = "Local",
                             Servers = new List<ServerDefinition>
                             {
-                                new ServerDefinition { Id = "local", Name = "Local", Type = "local" }
+                new ServerDefinition { Id = "local", Name = "Local", Type = "smb" }
                             }
                         }
                     }
@@ -259,6 +261,14 @@ namespace LogWatcher.Web.Config
                     }
                 }
             };
+
+        private static void MigrateLocalToSmb(List<PerimeterDefinition> perimeters)
+        {
+            foreach (var p in perimeters)
+            foreach (var rf in p.RootFolders ?? new())
+            foreach (var s in rf.Servers ?? new())
+                if (s.Type == "local") s.Type = "smb";
+        }
 
         private void Save()
         {

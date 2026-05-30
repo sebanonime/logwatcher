@@ -57,7 +57,7 @@ namespace LogWatcher.Web.Sessions
 
             IFileSourceProvider provider = server.Type switch
             {
-                "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
+                "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
                 "agent" => new AgentFileSourceProvider(server, _agentRegistry, sessionId),
                 _ => null
             };

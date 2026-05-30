@@ -78,7 +78,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
     if (!selectedRoot) return
 
-    const smbServers = selectedRoot.servers.filter(s => s.type === 'smb' || s.type === 'local')
+    const smbServers = selectedRoot.servers.filter(s => s.type === 'smb')
     smbServers.forEach(server => {
       getPathStatus(server.id)
         .then(status => setPathStatuses(prev => ({ ...prev, [server.id]: status })))
@@ -98,7 +98,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
       if (!agent) return 'unknown'
       return agent.online ? 'online' : 'offline'
     }
-    if (server.type === 'smb' || server.type === 'local') {
+    if (server.type === 'smb') {
       const s = pathStatuses[server.id]
       if (s === undefined) return 'unknown'
       return s.accessible ? 'online' : 'offline'
@@ -303,15 +303,14 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
                 Type
                 <select className="control-input" value={serverDraft.type} onChange={event => setServerDraft({ ...serverDraft, type: event.target.value as ServerDto['type'] })}>
                   <option value="smb">smb</option>
-                  <option value="local">local</option>
                   <option value="agent">agent</option>
                 </select>
               </label>
 
-              {(type === 'smb' || type === 'local') && (
+              {type === 'smb' && (
                 <label>
                   Path
-                  <input className="control-input" placeholder={type === 'smb' ? '\\\\server\\share' : 'C:\\logs'} value={serverDraft.host ?? ''} onChange={event => setServerDraft({ ...serverDraft, host: event.target.value })} />
+                  <input className="control-input" placeholder={'\\\\server\\share'} value={serverDraft.host ?? ''} onChange={event => setServerDraft({ ...serverDraft, host: event.target.value })} />
                 </label>
               )}
               {type === 'smb' && (

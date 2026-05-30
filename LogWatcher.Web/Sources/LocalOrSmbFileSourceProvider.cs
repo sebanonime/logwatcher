@@ -5,10 +5,8 @@ using System.Runtime.CompilerServices;
 namespace LogWatcher.Web.Sources
 {
     /// <summary>
-    /// Handles local files and SMB/UNC shares (e.g. \\server\share\logs\app.log).
-    /// UNC paths are natively supported by .NET's FileStream on Windows — no extra
-    /// code is needed. SMB credential impersonation is performed when Username is set
-    /// in the ServerDefinition.
+    /// Handles local and SMB/UNC paths (e.g. \\server\share\logs\app.log or C:\logs).
+    /// UNC paths are natively supported by .NET's FileStream on Windows — no extra code is needed.
     /// </summary>
     public class LocalOrSmbFileSourceProvider : IFileSourceProvider
     {

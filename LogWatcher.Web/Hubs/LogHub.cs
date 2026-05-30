@@ -81,7 +81,7 @@ namespace LogWatcher.Web.Hubs
             {
                 IFileSourceProvider provider = server.Type switch
                 {
-                    "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
+                    "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
                     "agent" => new AgentFileSourceProvider(server, _agentRegistry),
                     _ => null
                 };
@@ -94,8 +94,7 @@ namespace LogWatcher.Web.Hubs
                         ? basePath
                         : Path.Combine(basePath, subpath).Replace('\\', '/');
 
-                    var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
-                    // Set the server ID and source name on each item
+                    var items = (await provider.ListFilesAsync(dirPath, "*", CancellationToken.None)).ToList();
                     foreach (var item in items)
                     {
                         item.ServerId = server.Id;
@@ -155,7 +154,7 @@ namespace LogWatcher.Web.Hubs
             }
 
             // For agent servers, delegate search to agent to avoid full file transfer.
-            // For local/SMB servers, collect files and scan individually.
+            // For SMB servers, collect files and scan individually.
             var localFiles = new List<(RemoteFileInfoDto File, IFileSourceProvider Provider)>();
             var agentProviders = new List<IFileSourceProvider>();
 
@@ -163,7 +162,7 @@ namespace LogWatcher.Web.Hubs
             {
                 IFileSourceProvider provider = server.Type switch
                 {
-                    "local" or "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
+                    "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
                     "agent" => new AgentFileSourceProvider(server, _agentRegistry),
                     _ => null
                 };
@@ -198,7 +197,7 @@ namespace LogWatcher.Web.Hubs
                     }
 
                     // Local/SMB: collect candidate files for per-file scan
-                    var items = await provider.ListFilesAsync(dirPath, "*", CancellationToken.None);
+                    var items = (await provider.ListFilesAsync(dirPath, "*", CancellationToken.None)).ToList();
                     foreach (var item in items) { item.ServerId = server.Id; item.SourceName = server.Name; }
                     var candidates = items.Where(i => !i.IsDirectory).ToList();
                     if (!string.IsNullOrWhiteSpace(nameFilter))

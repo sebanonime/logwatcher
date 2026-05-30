@@ -102,7 +102,7 @@ namespace LogWatcher.Web.Controllers
             if (server.Type == "agent")
                 return Ok(new { online = _agentRegistry.IsConnected(server.AgentId) });
 
-            if (server.Type == "smb" || server.Type == "local")
+            if (server.Type == "smb")
             {
                 var accessible = !string.IsNullOrEmpty(server.Host) && Directory.Exists(server.Host);
                 return Ok(new { accessible });
