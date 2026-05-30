@@ -1,5 +1,7 @@
 import type {
   HighlightingRule,
+  KnownAgentDto,
+  PathStatusDto,
   PerimeterDto,
   PreferencesPayloadDto,
   ProfileDto,
@@ -41,6 +43,14 @@ async function authFetch<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function getLogBrowserSettings() {
   return authFetch<PerimeterDto[]>('/api/settings/log-browser')
+}
+
+export function getKnownAgents() {
+  return authFetch<KnownAgentDto[]>('/api/settings/log-browser/agents')
+}
+
+export function getPathStatus(serverId: string) {
+  return authFetch<PathStatusDto>(`/api/settings/log-browser/path-status/${encodeURIComponent(serverId)}`)
 }
 
 export function createPerimeter(payload: Partial<PerimeterDto>) {

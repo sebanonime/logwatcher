@@ -1499,6 +1499,33 @@ select {
   grid-template-columns: 1fr;
 }
 
+/* ─── Settings section divider (between list and form) ─── */
+.settings-section-divider {
+  border: none;
+  border-top: 2px solid var(--border-subtle);
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* ─── Status dot for agent / SMB paths ─── */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--online  { background: #4caf50; box-shadow: 0 0 4px #4caf5088; }
+.status-dot--offline { background: #f44336; }
+.status-dot--unknown { background: var(--text-3, #666); opacity: 0.5; }
+
+.settings-list-item--with-dot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* ─── Preferences layout: top row + profiles below ─── */
 .settings-prefs-layout {
   flex: 1;

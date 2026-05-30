@@ -48,6 +48,30 @@ export interface ServerDto {
   agentOnline?: boolean
 }
 
+export interface KnownAgentDto {
+  agentId: string
+  hostname: string
+  lastSeen: string
+  online: boolean
+}
+
+export interface PathStatusDto {
+  accessible?: boolean
+  online?: boolean
+}
+
+export interface FixValueDto {
+  enum: string
+  description: string
+}
+
+export interface FixFieldDto {
+  number: number
+  name: string
+  type: string
+  values: FixValueDto[]
+}
+
 export interface RootFolderDto {
   name: string
   servers: ServerDto[]

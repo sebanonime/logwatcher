@@ -12,11 +12,13 @@ namespace LogWatcher.Web.Controllers
     {
         private readonly ServerConfigRepository _servers;
         private readonly IAgentRegistry _agentRegistry;
+        private readonly KnownAgentsRepository _knownAgents;
 
-        public LogBrowserSettingsController(ServerConfigRepository servers, IAgentRegistry agentRegistry)
+        public LogBrowserSettingsController(ServerConfigRepository servers, IAgentRegistry agentRegistry, KnownAgentsRepository knownAgents)
         {
             _servers = servers;
             _agentRegistry = agentRegistry;
+            _knownAgents = knownAgents;
         }
 
         [HttpGet]
@@ -76,6 +78,37 @@ namespace LogWatcher.Web.Controllers
             perimeter.RootFolders ??= _servers.GetPerimeter(perimeterId)?.RootFolders ?? new List<RootFolderDefinition>();
             _servers.UpsertPerimeter(perimeter);
             return Ok(perimeter);
+        }
+
+        [HttpGet("agents")]
+        public IActionResult GetAgents()
+        {
+            var online = _agentRegistry.GetAll().Select(a => a.AgentId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return Ok(_knownAgents.GetAll().Select(a => new
+            {
+                agentId = a.AgentId,
+                hostname = a.Hostname,
+                lastSeen = a.LastSeen,
+                online = online.Contains(a.AgentId),
+            }));
+        }
+
+        [HttpGet("path-status/{serverId}")]
+        public IActionResult GetPathStatus(string serverId)
+        {
+            var server = _servers.GetById(serverId);
+            if (server == null) return NotFound();
+
+            if (server.Type == "agent")
+                return Ok(new { online = _agentRegistry.IsConnected(server.AgentId) });
+
+            if (server.Type == "smb" || server.Type == "local")
+            {
+                var accessible = !string.IsNullOrEmpty(server.Host) && Directory.Exists(server.Host);
+                return Ok(new { accessible });
+            }
+
+            return Ok(new { });
         }
 
         [HttpDelete("perimeters/{perimeterId}")]

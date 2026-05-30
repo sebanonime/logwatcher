@@ -35,28 +35,44 @@ public class AgentGrpcClient : IAsyncDisposable
 
     public async Task StartAsync(CancellationToken ct)
     {
-        string backendUrl = _config["Agent:BackendUrl"] ?? "https://localhost:7000";
-        int port = _config.GetValue<int>("Agent:BackendGrpcPort", 5001);
+        string backendUrl = _config["Agent:BackendGrpcUrl"] ?? "https://localhost";
+        int port = _config.GetValue<int>("Agent:BackendGrpcPort", 5005);
         string token = _config["Agent:Token"] ?? throw new InvalidOperationException("Agent:Token not configured.");
 
         var uri = new UriBuilder(backendUrl) { Port = port }.Uri;
+        bool insecure = uri.Scheme == Uri.UriSchemeHttp;
 
-        var handler = new HttpClientHandler
+        GrpcChannelOptions channelOptions;
+        if (insecure)
         {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        };
+            // HTTP/2 cleartext — inject token via HttpClient default header
+            var httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan, DefaultRequestHeaders = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token) } };
+            channelOptions = new GrpcChannelOptions
+            {
+                HttpClient = httpClient,
+                Credentials = ChannelCredentials.Insecure,
+            };
+        }
+        else
+        {
+            var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            };
+            channelOptions = new GrpcChannelOptions
+            {
+                HttpHandler = handler,
+                Credentials = ChannelCredentials.Create(
+                    new SslCredentials(),
+                    CallCredentials.FromInterceptor((context, metadata) =>
+                    {
+                        metadata.Add("authorization", $"Bearer {token}");
+                        return Task.CompletedTask;
+                    }))
+            };
+        }
 
-        _channel = GrpcChannel.ForAddress(uri, new GrpcChannelOptions
-        {
-            HttpHandler = handler,
-            Credentials = ChannelCredentials.Create(
-                new SslCredentials(),
-                CallCredentials.FromInterceptor((context, metadata) =>
-                {
-                    metadata.Add("authorization", $"Bearer {token}");
-                    return Task.CompletedTask;
-                }))
-        });
+        _channel = GrpcChannel.ForAddress(uri, channelOptions);
 
         var client = new AgentGateway.AgentGatewayClient(_channel);
         _call = client.Connect(cancellationToken: ct);

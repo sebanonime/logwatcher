@@ -1,5 +1,6 @@
 using Grpc.Core;
 using LogWatcher.Grpc;
+using LogWatcher.Web.Config;
 using LogWatcher.Web.Dto;
 using LogWatcher.Web.Sessions;
 
@@ -13,12 +14,14 @@ namespace LogWatcher.Web.Services
     {
         private readonly IAgentRegistry _registry;
         private readonly WatchSessionManager _sessions;
+        private readonly KnownAgentsRepository _knownAgents;
         private readonly ILogger<AgentGrpcService> _log;
 
-        public AgentGrpcService(IAgentRegistry registry, WatchSessionManager sessions, ILogger<AgentGrpcService> log)
+        public AgentGrpcService(IAgentRegistry registry, WatchSessionManager sessions, KnownAgentsRepository knownAgents, ILogger<AgentGrpcService> log)
         {
             _registry = registry;
             _sessions = sessions;
+            _knownAgents = knownAgents;
             _log = log;
         }
 
@@ -58,6 +61,7 @@ namespace LogWatcher.Web.Services
                                 agentMsg.Register.Hostname,
                                 agentMsg.Register.Capabilities.ToArray(),
                                 SendToAgent);
+                            _knownAgents.Upsert(agentId, agentMsg.Register.Hostname);
                             _sessions.OnAgentReconnected(agentId);
                             _log.LogInformation("Agent registered: {AgentId} ({Hostname})", agentId, agentMsg.Register.Hostname);
                             break;

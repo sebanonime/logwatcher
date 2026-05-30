@@ -6,27 +6,26 @@ import {
   deletePath,
   deletePerimeter,
   deleteRoot,
+  getKnownAgents,
   getLogBrowserSettings,
+  getPathStatus,
   updatePath,
   updatePerimeter,
   updateRoot,
 } from '../../api/settings'
 import { usePerimeterStore } from '../../store/perimeterStore'
-import type { PerimeterDto, RootFolderDto, ServerDto } from '../../types'
+import type { KnownAgentDto, PerimeterDto, ServerDto } from '../../types'
 
 interface LogBrowserSettingsScreenProps {
   onClose: () => void
 }
 
 function emptyServer(): ServerDto {
-  return {
-    id: '',
-    name: '',
-    type: 'local',
-    host: '',
-    agentId: '',
-    username: '',
-  }
+  return { id: '', name: '', type: 'smb', host: '', agentId: '', username: '' }
+}
+
+function StatusDot({ status }: { status: 'online' | 'offline' | 'unknown' }) {
+  return <span className={`status-dot status-dot--${status}`} title={status} />
 }
 
 export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenProps) {
@@ -39,6 +38,8 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   const [serverDraft, setServerDraft] = useState<ServerDto>(emptyServer())
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [knownAgents, setKnownAgents] = useState<KnownAgentDto[]>([])
+  const [pathStatuses, setPathStatuses] = useState<Record<string, { online?: boolean; accessible?: boolean }>>({})
 
   const selectedPerimeter = useMemo(
     () => perimeters.find(perimeter => perimeter.id === selectedPerimeterId) ?? null,
@@ -57,6 +58,12 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
   useEffect(() => {
     load().catch(loadError => setError(loadError instanceof Error ? loadError.message : 'Failed to load browser settings.'))
+    getKnownAgents().then(setKnownAgents).catch(() => {})
+
+    const interval = setInterval(() => {
+      getKnownAgents().then(setKnownAgents).catch(() => {})
+    }, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -67,22 +74,46 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   useEffect(() => {
     setRootName(selectedRoot?.name ?? '')
     setServerDraft(emptyServer())
+    setPathStatuses({})
+
+    if (!selectedRoot) return
+
+    const smbServers = selectedRoot.servers.filter(s => s.type === 'smb' || s.type === 'local')
+    smbServers.forEach(server => {
+      getPathStatus(server.id)
+        .then(status => setPathStatuses(prev => ({ ...prev, [server.id]: status })))
+        .catch(() => {})
+    })
   }, [selectedRoot])
+
+  const knownAgentsMap = useMemo(
+    () => new Map(knownAgents.map(a => [a.agentId, a])),
+    [knownAgents]
+  )
+
+  function getServerStatusDot(server: ServerDto): 'online' | 'offline' | 'unknown' {
+    if (server.type === 'agent') {
+      if (!server.agentId) return 'unknown'
+      const agent = knownAgentsMap.get(server.agentId)
+      if (!agent) return 'unknown'
+      return agent.online ? 'online' : 'offline'
+    }
+    if (server.type === 'smb' || server.type === 'local') {
+      const s = pathStatuses[server.id]
+      if (s === undefined) return 'unknown'
+      return s.accessible ? 'online' : 'offline'
+    }
+    return 'unknown'
+  }
 
   const savePerimeter = async () => {
     const trimmedName = perimeterName.trim()
-    if (!trimmedName) {
-      setError('Perimeter name is required.')
-      return
-    }
+    if (!trimmedName) { setError('Perimeter name is required.'); return }
 
     const perimeterNameExists = perimeters.some(perimeter =>
       perimeter.id !== selectedPerimeterId && perimeter.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
     )
-    if (perimeterNameExists) {
-      setError(`Perimeter '${trimmedName}' already exists.`)
-      return
-    }
+    if (perimeterNameExists) { setError(`Perimeter '${trimmedName}' already exists.`); return }
 
     setIsSaving(true)
     setError(null)
@@ -104,18 +135,12 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   const saveRoot = async () => {
     if (!selectedPerimeterId) return
     const trimmedName = rootName.trim()
-    if (!trimmedName) {
-      setError('Environment name is required.')
-      return
-    }
+    if (!trimmedName) { setError('Environment name is required.'); return }
 
     const rootNameExists = (selectedPerimeter?.rootFolders ?? []).some(root =>
       root.name !== selectedRootName && root.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
     )
-    if (rootNameExists) {
-      setError(`Environment '${trimmedName}' already exists.`)
-      return
-    }
+    if (rootNameExists) { setError(`Environment '${trimmedName}' already exists.`); return }
 
     setIsSaving(true)
     setError(null)
@@ -138,18 +163,12 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   const savePath = async () => {
     if (!selectedPerimeterId || !selectedRootName) return
     const trimmedName = serverDraft.name.trim()
-    if (!trimmedName) {
-      setError('Path name is required.')
-      return
-    }
+    if (!trimmedName) { setError('Path name is required.'); return }
 
     const pathNameExists = (selectedRoot?.servers ?? []).some(server =>
       server.id !== serverDraft.id && server.name.localeCompare(trimmedName, undefined, { sensitivity: 'accent' }) === 0
     )
-    if (pathNameExists) {
-      setError(`Path '${trimmedName}' already exists.`)
-      return
-    }
+    if (pathNameExists) { setError(`Path '${trimmedName}' already exists.`); return }
 
     setIsSaving(true)
     setError(null)
@@ -170,6 +189,8 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
     }
   }
 
+  const type = serverDraft.type
+
   return (
     <div className="settings-overlay">
       <div className="settings-screen">
@@ -184,6 +205,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
         {error && <div className="settings-error">{error}</div>}
 
         <div className="settings-three-columns">
+          {/* ── Perimeters ── */}
           <section className="settings-card">
             <div className="settings-card__header">
               <h3>Perimeters</h3>
@@ -200,6 +222,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
                 </button>
               ))}
             </div>
+            <div className="settings-section-divider" />
             <div className="settings-form-grid">
               <label>
                 Name
@@ -217,6 +240,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
             </div>
           </section>
 
+          {/* ── Environments ── */}
           <section className="settings-card">
             <div className="settings-card__header">
               <h3>Environments</h3>
@@ -233,6 +257,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
                 </button>
               ))}
             </div>
+            <div className="settings-section-divider" />
             <div className="settings-form-grid">
               <label>
                 Environment name
@@ -250,6 +275,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
             </div>
           </section>
 
+          {/* ── Paths ── */}
           <section className="settings-card">
             <div className="settings-card__header">
               <h3>Paths</h3>
@@ -259,13 +285,15 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               {selectedRoot?.servers.map(server => (
                 <button
                   key={server.id}
-                  className={`settings-list-item ${serverDraft.id === server.id ? 'settings-list-item--active' : ''}`}
+                  className={`settings-list-item settings-list-item--with-dot ${serverDraft.id === server.id ? 'settings-list-item--active' : ''}`}
                   onClick={() => setServerDraft(server)}
                 >
-                  {server.name || server.host || server.agentId || server.id}
+                  <StatusDot status={getServerStatusDot(server)} />
+                  <span>{server.name || server.host || server.agentId || server.id}</span>
                 </button>
               ))}
             </div>
+            <div className="settings-section-divider" />
             <div className="settings-form-grid settings-form-grid--stacked">
               <label>
                 Name
@@ -274,23 +302,57 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <label>
                 Type
                 <select className="control-input" value={serverDraft.type} onChange={event => setServerDraft({ ...serverDraft, type: event.target.value as ServerDto['type'] })}>
-                  <option value="local">local</option>
                   <option value="smb">smb</option>
+                  <option value="local">local</option>
                   <option value="agent">agent</option>
                 </select>
               </label>
-              <label>
-                Path / Host
-                <input className="control-input" value={serverDraft.host ?? ''} onChange={event => setServerDraft({ ...serverDraft, host: event.target.value })} />
-              </label>
-              <label>
-                Agent Id
-                <input className="control-input" value={serverDraft.agentId ?? ''} onChange={event => setServerDraft({ ...serverDraft, agentId: event.target.value })} />
-              </label>
-              <label>
-                Username
-                <input className="control-input" value={serverDraft.username ?? ''} onChange={event => setServerDraft({ ...serverDraft, username: event.target.value })} />
-              </label>
+
+              {(type === 'smb' || type === 'local') && (
+                <label>
+                  Path
+                  <input className="control-input" placeholder={type === 'smb' ? '\\\\server\\share' : 'C:\\logs'} value={serverDraft.host ?? ''} onChange={event => setServerDraft({ ...serverDraft, host: event.target.value })} />
+                </label>
+              )}
+              {type === 'smb' && (
+                <label>
+                  Username (optional)
+                  <input className="control-input" value={serverDraft.username ?? ''} onChange={event => setServerDraft({ ...serverDraft, username: event.target.value })} />
+                </label>
+              )}
+
+              {type === 'agent' && (
+                <>
+                  <label>
+                    Agent
+                    {knownAgents.length > 0 ? (
+                      <select
+                        className="control-input"
+                        value={serverDraft.agentId ?? ''}
+                        onChange={event => setServerDraft({ ...serverDraft, agentId: event.target.value })}
+                      >
+                        <option value="">— select agent —</option>
+                        {knownAgents.map(agent => (
+                          <option key={agent.agentId} value={agent.agentId}>
+                            {agent.hostname} ({agent.agentId}){agent.online ? ' ●' : ' ○'}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="control-input"
+                        placeholder="agent-id"
+                        value={serverDraft.agentId ?? ''}
+                        onChange={event => setServerDraft({ ...serverDraft, agentId: event.target.value })}
+                      />
+                    )}
+                  </label>
+                  <label>
+                    Path (on agent)
+                    <input className="control-input" placeholder="/var/log or C:\logs" value={serverDraft.host ?? ''} onChange={event => setServerDraft({ ...serverDraft, host: event.target.value })} />
+                  </label>
+                </>
+              )}
             </div>
             <div className="settings-actions-row">
               <button className="control-button control-button--primary" onClick={savePath} disabled={isSaving || !selectedPerimeterId || !selectedRootName || !serverDraft.name.trim()}>Save</button>

@@ -3,11 +3,49 @@ using LogWatcher.Web.Config;
 using LogWatcher.Web.Hubs;
 using LogWatcher.Web.Services;
 using LogWatcher.Web.Sessions;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
+
+// ── gRPC dedicated port ───────────────────────────────────────────────────────
+int grpcPort = config.GetValue<int>("Agent:GrpcListeningPort", 0);
+bool grpcInsecure = config.GetValue<bool>("Agent:GrpcAllowInsecure", false);
+
+if (grpcPort > 0 && grpcInsecure)
+{
+    builder.WebHost.ConfigureKestrel((ctx, kestrel) =>
+    {
+        // Explicit Kestrel Listen* overrides ASPNETCORE_URLS, so we re-apply the existing web URLs.
+        var webUrls = (Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var url in webUrls)
+        {
+            try
+            {
+                var uri = new Uri(url.Trim());
+                if (uri.Scheme == "https")
+                    kestrel.ListenAnyIP(uri.Port, o => o.UseHttps());
+                else
+                    kestrel.ListenAnyIP(uri.Port);
+            }
+            catch { }
+        }
+
+        // Fallback to launchSettings defaults when running outside dotnet run
+        if (webUrls.Length == 0)
+        {
+            kestrel.ListenLocalhost(7123, o => o.UseHttps());
+            kestrel.ListenLocalhost(5031);
+        }
+
+        // Dedicated HTTP/2 cleartext endpoint for gRPC agents
+        kestrel.ListenAnyIP(grpcPort, o => o.Protocols = HttpProtocols.Http2);
+    });
+}
 
 // ── Authentication (extensible via Auth:Provider) ──────────────────────────
 var authProvider = AuthProviderFactory.Create(config);
@@ -19,6 +57,7 @@ builder.Services.AddSingleton<CredentialStore>();
 builder.Services.AddSingleton<ServerConfigRepository>();
 builder.Services.AddSingleton<CommonPreferencesRepository>();
 builder.Services.AddSingleton<ProfileRepository>();
+builder.Services.AddSingleton<KnownAgentsRepository>();
 builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
 builder.Services.AddSingleton<WatchSessionManager>();
 
@@ -49,11 +88,17 @@ builder.Services.AddCors(opts =>
 
 var app = builder.Build();
 
+// ── HTTPS redirect (disabled for insecure gRPC mode — redirect breaks H2C) ─
+if (!grpcInsecure)
+    app.UseHttpsRedirection();
+
+// ── Add HTTPS gRPC port to existing URLs (secure mode only) ──────────────
+if (grpcPort > 0 && !grpcInsecure)
+    app.Urls.Add($"https://0.0.0.0:{grpcPort}");
+
 // ── Pipeline ───────────────────────────────────────────────────────────────
 if (app.Environment.IsDevelopment())
     app.UseCors("DevCors");
-
-app.UseHttpsRedirection();
 
 authProvider.ConfigurePipeline(app);
 
@@ -65,5 +110,18 @@ app.MapGrpcService<AgentGrpcService>();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapFallbackToFile("index.html");
+
+// ── Startup info ───────────────────────────────────────────────────────────
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    if (grpcPort > 0)
+    {
+        var scheme = grpcInsecure ? "http" : "https";
+        Console.WriteLine();
+        Console.WriteLine($"  [Agent gRPC]  {scheme}://{{YOUR_HOST}}:{grpcPort}");
+        Console.WriteLine($"  [Agent gRPC]  Mode : {(grpcInsecure ? "HTTP/2 cleartext (insecure)" : "HTTPS")}");
+        Console.WriteLine();
+    }
+});
 
 app.Run();
