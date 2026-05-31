@@ -4,7 +4,7 @@
   <LoadingParam>test</LoadingParam>
   <DicoHighLighting>
     <Highlighting>
-      <Order>1</Order>
+      <Order>0</Order>
       <Text>coucou</Text>
       <ForeColorArgb>-32704</ForeColorArgb>
       <BackColorArgb>-8388608</BackColorArgb>
@@ -18,12 +18,26 @@
       <IsRegex>false</IsRegex>
     </Highlighting>
     <Highlighting>
-      <Order>2</Order>
+      <Order>1</Order>
       <Text>hello</Text>
       <ForeColorArgb>-8323328</ForeColorArgb>
       <BackColorArgb>-17664</BackColorArgb>
       <DarkForeColorArgb>0</DarkForeColorArgb>
       <DarkBackColorArgb>-17664</DarkBackColorArgb>
+      <LightForeColorArgb>0</LightForeColorArgb>
+      <LightBackColorArgb>0</LightBackColorArgb>
+      <Bold>false</Bold>
+      <HightPriority>false</HightPriority>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </Highlighting>
+    <Highlighting>
+      <Order>2</Order>
+      <Text>yo</Text>
+      <ForeColorArgb>-2200602</ForeColorArgb>
+      <BackColorArgb>-16292375</BackColorArgb>
+      <DarkForeColorArgb>-2200602</DarkForeColorArgb>
+      <DarkBackColorArgb>-16292375</DarkBackColorArgb>
       <LightForeColorArgb>0</LightForeColorArgb>
       <LightBackColorArgb>0</LightBackColorArgb>
       <Bold>false</Bold>

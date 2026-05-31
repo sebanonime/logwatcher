@@ -25,7 +25,7 @@ function emptyHighlight(order: number): HighlightingRule {
     backColorArgb: 0,
     darkForeColorArgb: -1,
     darkBackColorArgb: 0,
-    lightForeColorArgb: -16777216,
+    lightForeColorArgb: 0,
     lightBackColorArgb: 0,
     bold: false,
     hightPriority: false,
@@ -140,71 +140,85 @@ function HighlightListEditor({ title, rules, onChange }: {
     setSelectedIndex(rules.length)
   }
 
+  const cloneRule = () => {
+    if (selectedIndex === null) return
+    const clone = { ...rules[selectedIndex] }
+    const next = [
+      ...rules.slice(0, selectedIndex + 1),
+      clone,
+      ...rules.slice(selectedIndex + 1),
+    ].map((r, i) => ({ ...r, order: i }))
+    onChange(next)
+    setSelectedIndex(selectedIndex + 1)
+  }
+
   const selectedRule = selectedIndex === null ? null : (rules[selectedIndex] ?? null)
 
   return (
     <section className="settings-card">
-      <div className="settings-card__header">
-        <h3>{title}</h3>
-        <div className="settings-actions-row">
-          <div className="highlight-reorder-controls">
-            <button className="highlight-reorder-btn-main" title="Move up"
-              disabled={selectedIndex === null || selectedIndex === 0}
-              onClick={() => selectedIndex !== null && moveRule(selectedIndex, -1)}>▲</button>
-            <button className="highlight-reorder-btn-main" title="Move down"
-              disabled={selectedIndex === null || selectedIndex === rules.length - 1}
-              onClick={() => selectedIndex !== null && moveRule(selectedIndex, 1)}>▼</button>
-          </div>
-          <button className="control-button control-button--ghost" onClick={addRule}>Add</button>
-          <button className="control-button control-button--ghost"
-            onClick={() => selectedIndex !== null && removeRule(selectedIndex)}
-            disabled={selectedIndex === null}>Delete</button>
+      <div className="settings-card__header highlight-toolbar-row">
+        <input className="control-input highlight-pattern-input" value={selectedRule?.text ?? ''}
+          placeholder="Pattern"
+          disabled={!selectedRule}
+          onChange={e => selectedIndex !== null && updateRule(selectedIndex, { text: e.target.value })} />
+        <label className="settings-inline-check">
+          <input type="checkbox" checked={selectedRule?.isRegex ?? false} disabled={!selectedRule}
+            onChange={e => selectedIndex !== null && updateRule(selectedIndex, { isRegex: e.target.checked })} />Regex</label>
+        <label className="settings-inline-check">
+          <input type="checkbox" checked={selectedRule?.caseSensitive ?? false} disabled={!selectedRule}
+            onChange={e => selectedIndex !== null && updateRule(selectedIndex, { caseSensitive: e.target.checked })} />Case</label>
+        <label className="settings-inline-check">
+          <input type="checkbox" checked={selectedRule?.bold ?? false} disabled={!selectedRule}
+            onChange={e => selectedIndex !== null && updateRule(selectedIndex, { bold: e.target.checked })} />Bold</label>
+        <label className="settings-inline-check">
+          <input type="checkbox" checked={selectedRule?.hightPriority ?? false} disabled={!selectedRule}
+            onChange={e => selectedIndex !== null && updateRule(selectedIndex, { hightPriority: e.target.checked })} />Priority</label>
+        <div className="highlight-reorder-controls">
+          <button className="highlight-reorder-btn-main" title="Move up"
+            disabled={selectedIndex === null || selectedIndex === 0}
+            onClick={() => selectedIndex !== null && moveRule(selectedIndex, -1)}>▲</button>
+          <button className="highlight-reorder-btn-main" title="Move down"
+            disabled={selectedIndex === null || selectedIndex === rules.length - 1}
+            onClick={() => selectedIndex !== null && moveRule(selectedIndex, 1)}>▼</button>
         </div>
+        <button className="control-button control-button--ghost" onClick={addRule}>Add</button>
+        <button className="control-button control-button--ghost" onClick={cloneRule}
+          disabled={selectedIndex === null}>Clone</button>
+        <button className="control-button control-button--ghost"
+          onClick={() => selectedIndex !== null && removeRule(selectedIndex)}
+          disabled={selectedIndex === null}>Delete</button>
       </div>
 
       {selectedRule ? (
         <div className="highlight-editor-pane">
-          <div className="highlight-editor-controls">
-            <div className="highlight-editor-top-row">
-              <input className="control-input highlight-pattern-input" value={selectedRule.text}
-                placeholder="Pattern"
-                onChange={e => updateRule(selectedIndex!, { text: e.target.value })} />
-              <div className="highlight-flags-row">
-                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.isRegex} onChange={e => updateRule(selectedIndex!, { isRegex: e.target.checked })} />Regex</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.caseSensitive} onChange={e => updateRule(selectedIndex!, { caseSensitive: e.target.checked })} />Case</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.bold} onChange={e => updateRule(selectedIndex!, { bold: e.target.checked })} />Bold</label>
-                <label className="settings-inline-check"><input type="checkbox" checked={selectedRule.hightPriority} onChange={e => updateRule(selectedIndex!, { hightPriority: e.target.checked })} />Priority</label>
-              </div>
+          <div className="highlight-theme-inline-row">
+            <div className="highlight-theme-cell highlight-theme-cell--dark">
+              <span className="highlight-theme-badge">◑</span>
+              <span className="highlight-theme-field-label">Text</span>
+              <ColorSwatch value={selectedRule.darkForeColorArgb || selectedRule.foreColorArgb} fallback="#ffffff"
+                title="Dark theme text color"
+                onChange={v => updateRule(selectedIndex!, { darkForeColorArgb: v, foreColorArgb: v })}
+                canClear={isColorSet(selectedRule.darkForeColorArgb)}
+                onClear={() => updateRule(selectedIndex!, { darkForeColorArgb: -1, foreColorArgb: -1 })} />
+              <span className="highlight-theme-field-label">Background</span>
+              <ColorSwatch value={selectedRule.darkBackColorArgb || selectedRule.backColorArgb || undefined} fallback="#1b2533"
+                title="Dark theme background (empty = none)"
+                onChange={v => updateRule(selectedIndex!, { darkBackColorArgb: v, backColorArgb: v })}
+                canClear onClear={() => updateRule(selectedIndex!, { darkBackColorArgb: 0, backColorArgb: 0 })} />
             </div>
-            <div className="highlight-theme-inline-row">
-              <div className="highlight-theme-cell highlight-theme-cell--dark">
-                <span className="highlight-theme-badge">◑</span>
-                <span className="highlight-theme-field-label">Text</span>
-                <ColorSwatch value={selectedRule.darkForeColorArgb || selectedRule.foreColorArgb} fallback="#ffffff"
-                  title="Dark theme text color"
-                  onChange={v => updateRule(selectedIndex!, { darkForeColorArgb: v, foreColorArgb: v })}
-                  canClear={isColorSet(selectedRule.darkForeColorArgb)}
-                  onClear={() => updateRule(selectedIndex!, { darkForeColorArgb: -1, foreColorArgb: -1 })} />
-                <span className="highlight-theme-field-label">Background</span>
-                <ColorSwatch value={selectedRule.darkBackColorArgb || selectedRule.backColorArgb || undefined} fallback="#1b2533"
-                  title="Dark theme background (empty = none)"
-                  onChange={v => updateRule(selectedIndex!, { darkBackColorArgb: v, backColorArgb: v })}
-                  canClear onClear={() => updateRule(selectedIndex!, { darkBackColorArgb: 0, backColorArgb: 0 })} />
-              </div>
-              <div className="highlight-theme-cell highlight-theme-cell--light">
-                <span className="highlight-theme-badge">◐</span>
-                <span className="highlight-theme-field-label">Text</span>
-                <ColorSwatch value={selectedRule.lightForeColorArgb || undefined} fallback="#000000"
-                  title="Light theme text color (empty = use dark)"
-                  onChange={v => updateRule(selectedIndex!, { lightForeColorArgb: v })}
-                  canClear={!!(selectedRule.lightForeColorArgb)}
-                  onClear={() => updateRule(selectedIndex!, { lightForeColorArgb: 0 })} />
-                <span className="highlight-theme-field-label">Background</span>
-                <ColorSwatch value={selectedRule.lightBackColorArgb || undefined} fallback="#ffffff"
-                  title="Light theme background (empty = none)"
-                  onChange={v => updateRule(selectedIndex!, { lightBackColorArgb: v })}
-                  canClear onClear={() => updateRule(selectedIndex!, { lightBackColorArgb: 0 })} />
-              </div>
+            <div className="highlight-theme-cell highlight-theme-cell--light">
+              <span className="highlight-theme-badge">◐</span>
+              <span className="highlight-theme-field-label">Text</span>
+              <ColorSwatch value={selectedRule.lightForeColorArgb || undefined} fallback="#000000"
+                title="Light theme text color (empty = use dark)"
+                onChange={v => updateRule(selectedIndex!, { lightForeColorArgb: v })}
+                canClear={!!(selectedRule.lightForeColorArgb)}
+                onClear={() => updateRule(selectedIndex!, { lightForeColorArgb: 0 })} />
+              <span className="highlight-theme-field-label">Background</span>
+              <ColorSwatch value={selectedRule.lightBackColorArgb || undefined} fallback="#ffffff"
+                title="Light theme background (empty = none)"
+                onChange={v => updateRule(selectedIndex!, { lightBackColorArgb: v })}
+                canClear onClear={() => updateRule(selectedIndex!, { lightBackColorArgb: 0 })} />
             </div>
           </div>
         </div>
@@ -403,7 +417,6 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
         <div className="settings-tab-content">
           {activeTab === 'prefs' && (
             <section className="settings-card">
-              <div className="settings-card__header"><h3>User preferences</h3></div>
               <div className="settings-form-grid">
                 <label>Theme
                   <select className="control-input" value={themeDraft} onChange={e => setThemeDraft(e.target.value as 'dark' | 'light')}>
@@ -429,22 +442,21 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
           {activeTab === 'profiles' && (
             <section className="settings-card settings-profiles-card">
-              <div className="settings-card__header">
-                <h3>Profiles</h3>
-                <div className="settings-actions-row">
-                  <button className="control-button control-button--ghost" onClick={createProfile}>New</button>
-                  <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile}>Delete</button>
-                </div>
-              </div>
               <div className="settings-split-layout">
-                <div className="settings-list-panel">
-                  {profilesDraft.map((profile, index) => (
-                    <button key={`${profile.name}-${index}`}
-                      className={`settings-list-item ${selectedProfileIndex === index ? 'settings-list-item--active' : ''}`}
-                      onClick={() => { setSelectedProfileIndex(index); setSelectedStoredFilterIndex(profile.dicoStoredFilter?.length ? 0 : null) }}>
-                      {profile.name}
-                    </button>
-                  ))}
+                <div className="settings-list-column">
+                  <div className="settings-list-actions">
+                    <button className="control-button control-button--ghost" onClick={createProfile}>New</button>
+                    <button className="control-button control-button--ghost" onClick={removeSelectedProfile} disabled={!selectedProfile}>Delete</button>
+                  </div>
+                  <div className="settings-list-panel">
+                    {profilesDraft.map((profile, index) => (
+                      <button key={`${profile.name}-${index}`}
+                        className={`settings-list-item ${selectedProfileIndex === index ? 'settings-list-item--active' : ''}`}
+                        onClick={() => { setSelectedProfileIndex(index); setSelectedStoredFilterIndex(profile.dicoStoredFilter?.length ? 0 : null) }}>
+                        {profile.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="settings-detail-panel">
                   {selectedProfile ? (
@@ -476,7 +488,6 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                       {activeProfileTab === 'hidden' && (
                         <section className="settings-card">
                           <div className="settings-card__header">
-                            <h3>Hidden lines</h3>
                             <button className="control-button control-button--ghost" onClick={addHiddenLine}>Add</button>
                           </div>
                           <div className="settings-list-panel">
@@ -497,7 +508,6 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                       {activeProfileTab === 'stored' && (
                         <section className="settings-card">
                           <div className="settings-card__header">
-                            <h3>Stored filters</h3>
                             <div className="settings-actions-row">
                               <button className="control-button control-button--ghost" onClick={addStoredFilter}>Add</button>
                               <button className="control-button control-button--ghost" onClick={removeStoredFilter} disabled={!selectedStoredFilter}>Delete</button>
