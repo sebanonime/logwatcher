@@ -253,7 +253,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
   const { theme, setTheme, fontFamily, setFontFamily, fontSize, setFontSize } = useUiStore()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'prefs' | 'highlights' | 'profiles'>('prefs')
+  const [activeTab, setActiveTab] = useState<'prefs' | 'highlights' | 'profiles'>('profiles')
   const [defaultsDraft, setDefaultsDraft] = useState<HighlightingRule[]>([])
   const [profilesDraft, setProfilesDraft] = useState<ProfileDto[]>([])
   const [themeDraft, setThemeDraft] = useState<'dark' | 'light'>(theme)
@@ -283,7 +283,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
   useEffect(() => {
     setProfilesDraft(profiles)
     if (profiles.length > 0 && selectedProfileIndex === null) setSelectedProfileIndex(0)
-  }, [profiles, selectedProfileIndex])
+  }, [profiles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (selectedProfileIndex === null) { setSelectedStoredFilterIndex(null); return }
@@ -385,7 +385,6 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
         <div className="settings-screen__header">
           <div>
             <h2>Preferences</h2>
-            <p>Manage user display preferences and shared highlights/profiles.</p>
           </div>
           <div className="settings-actions-row">
             <button className="control-button control-button--primary" onClick={saveAll} disabled={isSaving}>Save</button>
@@ -396,9 +395,9 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
         {error && <div className="settings-error">{error}</div>}
 
         <div className="settings-tab-bar">
-          <button className={`settings-tab-btn ${activeTab === 'prefs' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('prefs')}>User preferences</button>
-          <button className={`settings-tab-btn ${activeTab === 'highlights' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('highlights')}>Default highlights</button>
           <button className={`settings-tab-btn ${activeTab === 'profiles' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('profiles')}>Profiles</button>
+          <button className={`settings-tab-btn ${activeTab === 'highlights' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('highlights')}>Default highlights</button>
+          <button className={`settings-tab-btn ${activeTab === 'prefs' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('prefs')}>User preferences</button>
         </div>
 
         <div className="settings-tab-content">
@@ -457,7 +456,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                         <label>Encoding
                           <input className="control-input" value={selectedProfile.encoding ?? 'UTF-8'} onChange={e => updateSelectedProfile({ encoding: e.target.value })} />
                         </label>
-                        <label>Loading param
+                        <label>File pattern (to load profile automatically)
                           <input className="control-input" value={selectedProfile.loadingParam ?? ''} onChange={e => updateSelectedProfile({ loadingParam: e.target.value })} />
                         </label>
                       </div>

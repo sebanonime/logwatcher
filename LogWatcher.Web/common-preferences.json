@@ -2,6 +2,20 @@
   "DefaultHighlights": [
     {
       "Order": 0,
+      "Text": "ERROR",
+      "ForeColorArgb": -1,
+      "BackColorArgb": -65536,
+      "DarkForeColorArgb": -1,
+      "DarkBackColorArgb": -65536,
+      "LightForeColorArgb": -16777216,
+      "LightBackColorArgb": 0,
+      "Bold": false,
+      "HightPriority": false,
+      "CaseSensitive": false,
+      "IsRegex": false
+    },
+    {
+      "Order": 1,
       "Text": "INFO",
       "ForeColorArgb": -1,
       "BackColorArgb": 0,
@@ -15,7 +29,7 @@
       "IsRegex": false
     },
     {
-      "Order": 1,
+      "Order": 2,
       "Text": "DEBUG",
       "ForeColorArgb": -16748801,
       "BackColorArgb": 0,

@@ -25,6 +25,7 @@ interface BrowserState {
 
   loadRoot: (perimeterId: string, rootFolderName: string) => Promise<void>
   loadSubfolder: (perimeterId: string, rootFolderName: string, subfolderPath: string) => Promise<void>
+  refreshFiles: (perimeterId: string, rootFolderName: string, subfolderPath: string) => Promise<void>
   setSubfoldersFilter: (f: string) => void
   setFilesFilter: (f: string) => void
   setContentFilter: (f: string) => void
@@ -96,6 +97,15 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
       set({ files: items.filter(i => !i.isDirectory) })
     } catch { /* ignore */ }
     finally { set({ isLoadingFiles: false }) }
+  },
+
+  refreshFiles: async (perimeterId, rootFolderName, subfolderPath) => {
+    try {
+      await startLogHub()
+      const hub = getLogHub()
+      const items: RemoteFileInfoDto[] = await hub.invoke('BrowseRoot', perimeterId, rootFolderName, subfolderPath)
+      set({ files: items.filter(i => !i.isDirectory) })
+    } catch { /* ignore */ }
   },
 
   setSubfoldersFilter: (f) => set({ subfoldersFilter: f }),

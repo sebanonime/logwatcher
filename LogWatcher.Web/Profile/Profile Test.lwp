@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Profile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Name>Profile Test</Name>
-  <LoadingParam>testLog</LoadingParam>
+  <LoadingParam />
   <Encoding>UTF-8</Encoding>
   <DicoHighLighting>
     <Highlighting>
       <Order>0</Order>
       <Text>test</Text>
       <ForeColorArgb>-1</ForeColorArgb>
-      <BackColorArgb>0</BackColorArgb>
+      <BackColorArgb>-16751019</BackColorArgb>
       <DarkForeColorArgb>-8781824</DarkForeColorArgb>
-      <DarkBackColorArgb>-13736448</DarkBackColorArgb>
+      <DarkBackColorArgb>-16751019</DarkBackColorArgb>
       <LightForeColorArgb>0</LightForeColorArgb>
       <LightBackColorArgb>0</LightBackColorArgb>
-      <Bold>true</Bold>
+      <Bold>false</Bold>
       <HightPriority>false</HightPriority>
       <CaseSensitive>false</CaseSensitive>
       <IsRegex>false</IsRegex>
@@ -29,9 +29,9 @@
   </DicoHiddenLog>
   <DicoStoredFilter>
     <StoredFilter>
-      <Name>All Info</Name>
+      <Name>All info</Name>
       <Filter>INFO</Filter>
-      <IsRegex>false</IsRegex>
+      <IsRegex>true</IsRegex>
       <CaseSensitive>false</CaseSensitive>
     </StoredFilter>
   </DicoStoredFilter>

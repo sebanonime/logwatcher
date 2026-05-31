@@ -645,14 +645,41 @@ namespace LogWatcher.Web.Sessions
                 _index.AddOffset(offset);
                 _index.TotalBytes = offset + _encoding.GetByteCount(line) + 1;
             }
+
+            if (!_tailMode) return;
+
             var dtos = lines.Select((t, i) => new LineDto
             {
                 LineNumber = _index.Count - lines.Length + i,
                 Text = t
             }).ToArray();
 
-            if (_tailMode)
-                await _logHub.Clients.Group(SessionId).SendAsync("OnNewLines", SessionId, dtos, _index.Count);
+            if (_filterEnabled)
+            {
+                var filter = Volatile.Read(ref _filter);
+                if (filter != null && !_isFilterBuilding)
+                {
+                    var visibleLines = FilterNewLinesInline(dtos);
+                    if (visibleLines.Length > 0)
+                    {
+                        int filterStart = filter.Count;
+                        foreach (var line in visibleLines)
+                            filter.Add(line.LineNumber);
+                        var remapped = visibleLines
+                            .Select((l, i) => new LineDto { LineNumber = filterStart + i, Text = l.Text })
+                            .ToArray();
+                        await _logHub.Clients.Group(SessionId).SendAsync("OnNewLines", SessionId, remapped, filter.Count);
+                    }
+                }
+            }
+            else
+            {
+                var hiddenRules = _activeHiddenLines;
+                if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
+                    dtos = dtos.Where(d => !IsHiddenByRules(d.Text, hiddenRules)).ToArray();
+                if (dtos.Length > 0)
+                    await _logHub.Clients.Group(SessionId).SendAsync("OnNewLines", SessionId, dtos, _index.Count);
+            }
         }
 
         public void Stop() => _cts.Cancel();

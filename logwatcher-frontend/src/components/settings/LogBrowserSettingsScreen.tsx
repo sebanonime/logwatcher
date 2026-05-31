@@ -233,7 +233,11 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <button className="control-button control-button--primary" onClick={savePerimeter} disabled={isSaving || !perimeterName.trim()}>Save</button>
               <button className="control-button control-button--ghost" disabled={!selectedPerimeterId || isSaving} onClick={async () => {
                 if (!selectedPerimeterId) return
-                await deletePerimeter(selectedPerimeterId)
+                const idToDelete = selectedPerimeterId
+                setSelectedPerimeterId(null)
+                setSelectedRootName(null)
+                setPerimeters(prev => prev.filter(p => p.id !== idToDelete))
+                await deletePerimeter(idToDelete)
                 await load()
                 await fetchPerimeters()
               }}>Delete</button>
@@ -268,7 +272,15 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <button className="control-button control-button--primary" onClick={saveRoot} disabled={isSaving || !selectedPerimeterId || !rootName.trim()}>Save</button>
               <button className="control-button control-button--ghost" disabled={!selectedPerimeterId || !selectedRootName || isSaving} onClick={async () => {
                 if (!selectedPerimeterId || !selectedRootName) return
-                await deleteRoot(selectedPerimeterId, selectedRootName)
+                const rootToDelete = selectedRootName
+                setSelectedRootName(null)
+                setServerDraft(emptyServer())
+                setPerimeters(prev => prev.map(p =>
+                  p.id === selectedPerimeterId
+                    ? { ...p, rootFolders: p.rootFolders.filter(r => r.name !== rootToDelete) }
+                    : p
+                ))
+                await deleteRoot(selectedPerimeterId, rootToDelete)
                 await load()
                 await fetchPerimeters()
               }}>Delete</button>
@@ -357,10 +369,20 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <button className="control-button control-button--primary" onClick={savePath} disabled={isSaving || !selectedPerimeterId || !selectedRootName || !serverDraft.name.trim()}>Save</button>
               <button className="control-button control-button--ghost" disabled={!selectedPerimeterId || !selectedRootName || !serverDraft.id || isSaving} onClick={async () => {
                 if (!selectedPerimeterId || !selectedRootName || !serverDraft.id) return
-                await deletePath(selectedPerimeterId, selectedRootName, serverDraft.id)
+                const idToDelete = serverDraft.id
+                setServerDraft(emptyServer())
+                setPerimeters(prev => prev.map(p =>
+                  p.id === selectedPerimeterId
+                    ? { ...p, rootFolders: p.rootFolders.map(r =>
+                        r.name === selectedRootName
+                          ? { ...r, servers: r.servers.filter(s => s.id !== idToDelete) }
+                          : r
+                      )}
+                    : p
+                ))
+                await deletePath(selectedPerimeterId, selectedRootName, idToDelete)
                 await load()
                 await fetchPerimeters()
-                setServerDraft(emptyServer())
               }}>Delete</button>
             </div>
           </section>

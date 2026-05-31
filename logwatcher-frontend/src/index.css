@@ -497,6 +497,8 @@ select {
   padding: 3px;
   min-height: 0;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .browser-files-header {
@@ -1875,6 +1877,35 @@ select {
 .highlight-preview-swatch--fallback {
   border-style: dashed;
   opacity: 0.72;
+}
+
+/* ─── Files panel: grow list, footer checkbox, last-modified time ─── */
+.browser-files .browser-file-list {
+  flex: 1;
+  min-height: 0;
+}
+
+.browser-files-footer {
+  padding: 4px 6px 2px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.browser-file-time {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-text-muted, #888);
+  flex-shrink: 0;
+  padding-left: 6px;
+}
+
+/* ─── Highlight preview: full width, equal dark/light ─── */
+.highlight-preview {
+  flex: 1;
+}
+
+.highlight-preview-text {
+  flex: 1;
 }
 
 /* ─── Clear search results button (inline next to badge) ─── */

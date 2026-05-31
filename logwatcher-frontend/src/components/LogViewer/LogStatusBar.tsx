@@ -12,7 +12,6 @@ export function LogStatusBar({ sessionId }: LogStatusBarProps) {
 
   return (
     <div className="log-status-bar">
-      <span className="status-pill">{tab.totalLines.toLocaleString()} lines</span>
       <span className="status-pill">{formatBytes(tab.sizeBytes)}</span>
       {!tab.isIndexed && <span className="status-pill status-pill--warn">Indexing…</span>}
       {tab.isFiltered && <span className="status-pill">Filtered</span>}

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { useBrowserStore } from '../../store/browserStore'
 import { usePerimeterStore } from '../../store/perimeterStore'
@@ -18,6 +18,12 @@ function isRolledFile(path: string): boolean {
   const name = basename(path)
   // Match: name_N.ext or name.N.ext where N is one or more digits
   return /[_\.]\d+\.[^./\\]+$/.test(name)
+}
+
+function formatTime(isoString: string): string {
+  try {
+    return new Date(isoString).toTimeString().slice(0, 8)
+  } catch { return '' }
 }
 
 function matchProfile(profiles: ProfileDto[], filePath: string): ProfileDto | null {
@@ -57,7 +63,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     selectedRootFolder, subfolders, rootFiles, rootFilesFolderPath, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
     contentFilter, contentFilterIsRegex, isSearchingContent, searchProgress, contentSearchResults,
-    loadRoot, loadSubfolder, setSubfoldersFilter, setFilesFilter,
+    loadRoot, loadSubfolder, refreshFiles, setSubfoldersFilter, setFilesFilter,
     setContentFilter, setContentFilterIsRegex, searchContent, clearContentSearch, clearSearchResults,
   } = useBrowserStore()
 
@@ -65,6 +71,16 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const profiles = usePreferencesStore(state => state.profiles)
   const selectedPerimeter = perimeters.find(p => p.id === selectedPerimeterId)
   const [showSearchPopup, setShowSearchPopup] = useState(false)
+  const [showCurrentOnly, setShowCurrentOnly] = useState(false)
+
+  // Auto-refresh file list every 15s without clearing the existing list
+  useEffect(() => {
+    if (!selectedPerimeterId || !selectedRootFolder || !selectedSubfolder) return
+    const id = setInterval(() => {
+      refreshFiles(selectedPerimeterId, selectedRootFolder, selectedSubfolder)
+    }, 15000)
+    return () => clearInterval(id)
+  }, [selectedPerimeterId, selectedRootFolder, selectedSubfolder, refreshFiles])
 
   const handlePerimeterChange = useCallback((newPerimeterId: string) => {
     selectPerimeter(newPerimeterId)
@@ -165,9 +181,10 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   }, {})
 
   // Determine which file list to display
-  const displayedFiles = contentSearchResults !== null
+  const baseFiles = contentSearchResults !== null
     ? contentSearchResults
     : files.filter(f => basename(f.path).toLowerCase().includes(filesFilter.toLowerCase()))
+  const displayedFiles = showCurrentOnly ? baseFiles.filter(f => !isRolledFile(f.path)) : baseFiles
 
   const progressPct = searchProgress && searchProgress.total > 0
     ? Math.round((searchProgress.scanned / searchProgress.total) * 100)
@@ -360,6 +377,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                 {displayedFiles.map(f => {
                   const name = basename(f.path)
                   const rolled = isRolledFile(f.path)
+                  const modTime = formatTime(f.lastModified)
                   return (
                     <button
                       key={f.path}
@@ -368,9 +386,16 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                       title={`Double-click to open:\n${f.path}`}
                     >
                       <span className="browser-item-title">{name}</span>
+                      {modTime && <span className="browser-file-time">{modTime}</span>}
                     </button>
                   )
                 })}
+              </div>
+              <div className="browser-files-footer">
+                <label className="settings-inline-check">
+                  <input type="checkbox" checked={showCurrentOnly} onChange={e => setShowCurrentOnly(e.target.checked)} />
+                  Current files only
+                </label>
               </div>
             </div>
           </Panel>

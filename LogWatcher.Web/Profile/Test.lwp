@@ -1,19 +1,37 @@
-<?xml version="1.0" encoding="utf-16"?>
-<LogWatcher.Common.Profile>
+<?xml version="1.0" encoding="utf-8"?>
+<Profile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Name>Test</Name>
-  <LoadingParam />
+  <LoadingParam>test</LoadingParam>
   <DicoHighLighting>
-    <LogWatcher.Common.Highlighting>
+    <Highlighting>
       <Order>1</Order>
       <Text>coucou</Text>
       <ForeColorArgb>-32704</ForeColorArgb>
       <BackColorArgb>-8388608</BackColorArgb>
-      <Bold>False</Bold>
-      <HightPriority>False</HightPriority>
-      <CaseSensitive>False</CaseSensitive>
-      <IsRegex>False</IsRegex>
-    </LogWatcher.Common.Highlighting>
+      <DarkForeColorArgb>0</DarkForeColorArgb>
+      <DarkBackColorArgb>0</DarkBackColorArgb>
+      <LightForeColorArgb>0</LightForeColorArgb>
+      <LightBackColorArgb>0</LightBackColorArgb>
+      <Bold>false</Bold>
+      <HightPriority>false</HightPriority>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </Highlighting>
+    <Highlighting>
+      <Order>2</Order>
+      <Text>hello</Text>
+      <ForeColorArgb>-8323328</ForeColorArgb>
+      <BackColorArgb>-17664</BackColorArgb>
+      <DarkForeColorArgb>0</DarkForeColorArgb>
+      <DarkBackColorArgb>-17664</DarkBackColorArgb>
+      <LightForeColorArgb>0</LightForeColorArgb>
+      <LightBackColorArgb>0</LightBackColorArgb>
+      <Bold>false</Bold>
+      <HightPriority>false</HightPriority>
+      <CaseSensitive>false</CaseSensitive>
+      <IsRegex>false</IsRegex>
+    </Highlighting>
   </DicoHighLighting>
   <DicoHiddenLog />
   <DicoStoredFilter />
-</LogWatcher.Common.Profile>
+</Profile>
