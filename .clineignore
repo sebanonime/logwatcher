@@ -1,0 +1,26 @@
+# Dossiers de compilation et de publication (Très lourd)
+bin/
+obj/
+publish/
+dist/
+build/
+
+# Dépendances externes
+node_modules/
+bower_components/
+
+# Environnements virtuels (si tu as du Python)
+.venv/
+env/
+venv/
+
+# Dossiers systèmes et caches
+.git/
+.svn/
+.vs/
+.idea/
+.vscode/
+
+# Fichiers de logs et données temporaires
+*.log
+*.tmp

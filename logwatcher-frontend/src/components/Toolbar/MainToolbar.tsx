@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import type { HubConnection } from '@microsoft/signalr'
 import { useTabStore } from '../../store/logStore'
@@ -55,6 +55,8 @@ export function MainToolbar({
   const [pattern, setPattern] = useState('')
   const [isFiltering, setIsFiltering] = useState(false)
   const [contextModal, setContextModal] = useState<{ lines: LineDto[]; targetLineNumber: number } | null>(null)
+  const contextBodyRef = useRef<HTMLDivElement>(null)
+  const targetLineRef = useRef<HTMLDivElement>(null)
   const buildId = __APP_BUILD__
 
   // Reset filter state when active tab changes
@@ -129,6 +131,17 @@ export function MainToolbar({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
+  }, [contextModal])
+
+  // Auto-scroll the target line to the center of the context modal
+  useLayoutEffect(() => {
+    if (!contextModal || !targetLineRef.current || !contextBodyRef.current) return
+    const targetEl = targetLineRef.current
+    const container = contextBodyRef.current
+    const containerHeight = container.clientHeight
+    const targetOffset = targetEl.offsetTop
+    const scrollTo = targetOffset - containerHeight / 2 + targetEl.clientHeight / 2
+    container.scrollTop = Math.max(0, scrollTo)
   }, [contextModal])
 
   const applyStoredFilterNow = useCallback(async (storedFilterName?: string) => {
@@ -558,12 +571,16 @@ export function MainToolbar({
                 ×
               </button>
             </div>
-            <div className="context-modal__body">
+            <div className="context-modal__body" ref={contextBodyRef}>
               {contextModal.lines.map(line => {
                 const isTarget = line.lineNumber === contextModal.targetLineNumber
                 const segments = highlightLine(line.text)
                 return (
-                  <div key={line.lineNumber} className={`context-modal__line ${isTarget ? 'context-modal__line--target' : ''}`}>
+                  <div
+                    key={line.lineNumber}
+                    ref={isTarget ? targetLineRef : undefined}
+                    className={`context-modal__line ${isTarget ? 'context-modal__line--target' : ''}`}
+                  >
                     <span className="context-modal__line-text">
                       {segments.map((seg, index) => (
                         <span

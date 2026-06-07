@@ -6,7 +6,7 @@ interface LogLineProps {
   text: string | undefined
   segments?: Segment[]
   isSelected?: boolean
-  onClick?: () => void
+  onClick?: (e: React.MouseEvent) => void
 }
 
 /**
@@ -58,11 +58,12 @@ export const LogLine = memo(function LogLine({
     : text
 
   return (
-    <div
-      className={`log-row ${isSelected ? 'log-row--selected' : ''}`}
-      style={{ minHeight: 20, ...lineStyle, ...selectedStyle }}
-      onClick={onClick}
-    >
+      <div
+        className={`log-row ${isSelected ? 'log-row--selected' : ''}`}
+        style={{ minHeight: 20, ...lineStyle, ...selectedStyle }}
+        onClick={onClick}
+        onMouseDown={onClick ? (e) => { if (e.button !== 0) return; onClick(e); e.preventDefault() } : undefined}
+      >
       <span className="log-row__content">{content}</span>
     </div>
   )

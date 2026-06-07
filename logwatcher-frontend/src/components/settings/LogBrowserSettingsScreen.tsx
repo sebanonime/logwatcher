@@ -35,6 +35,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   const [selectedRootName, setSelectedRootName] = useState<string | null>(null)
   const [perimeterName, setPerimeterName] = useState('')
   const [rootName, setRootName] = useState('')
+  const [rootColor, setRootColor] = useState('')
   const [serverDraft, setServerDraft] = useState<ServerDto>(emptyServer())
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -73,6 +74,7 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
   useEffect(() => {
     setRootName(selectedRoot?.name ?? '')
+    setRootColor(selectedRoot?.environmentColor ?? '')
     setServerDraft(emptyServer())
     setPathStatuses({})
 
@@ -145,10 +147,14 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
     setIsSaving(true)
     setError(null)
     try {
+      const rootColorTrimmed = rootColor.trim()
       if (selectedRoot) {
-        await updateRoot(selectedPerimeterId, selectedRoot.name, { name: trimmedName })
+        await updateRoot(selectedPerimeterId, selectedRoot.name, {
+          name: trimmedName,
+          ...(rootColorTrimmed ? { environmentColor: rootColorTrimmed } : {}),
+        })
       } else {
-        await createRoot(selectedPerimeterId, { name: trimmedName, servers: [] })
+        await createRoot(selectedPerimeterId, { name: trimmedName, servers: [], ...(rootColorTrimmed ? { environmentColor: rootColorTrimmed } : {}) })
       }
       await load()
       await fetchPerimeters()
@@ -266,6 +272,21 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <label>
                 Environment name
                 <input className="control-input" value={rootName} onChange={event => setRootName(event.target.value)} />
+              </label>
+              <label>
+                Color (optional)
+                <div className="color-swatch-wrap" style={{ marginTop: 2 }}>
+                  <input
+                    type="color"
+                    className="control-input"
+                    value={rootColor || '#000000'}
+                    onChange={event => setRootColor(event.target.value)}
+                    style={{ width: 48, height: 30, padding: 2 }}
+                  />
+                  {rootColor && (
+                    <button className="color-swatch-clear" onClick={() => setRootColor('')}>✕</button>
+                  )}
+                </div>
               </label>
             </div>
             <div className="settings-actions-row">

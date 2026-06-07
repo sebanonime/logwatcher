@@ -4,6 +4,7 @@ import type { HubConnection } from '@microsoft/signalr'
 import { useVirtualLines } from '../../hooks/useVirtualLines'
 import { useHighlighting } from '../../hooks/useHighlighting'
 import { useLogStore, useTabStore } from '../../store/logStore'
+import { useSelectionStore, orderedRange } from '../../store/selectionStore'
 import { LogLine } from './LogLine'
 import type { HighlightingRule } from '../../types'
 
@@ -21,6 +22,7 @@ interface LogVirtualListProps {
  * The core virtual list component.
  * Uses TanStack Virtual to render only ~20-50 rows at a time regardless of file size.
  * Fetches missing line chunks from the server as the user scrolls.
+ * Supports multi-line selection with Shift+click and Shift+arrows, and Ctrl+C copy.
  */
 export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHighlightingRules = [], tailMode }: LogVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
@@ -28,6 +30,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const { highlightLine } = useHighlighting(highlightingRules, fallbackHighlightingRules)
   const { setSelectedLine, getSelectedLine } = useLogStore()
   const { updateTab } = useTabStore()
+  const selectionStore = useSelectionStore()
   const selectedLine = getSelectedLine(sessionId)
   const lastScrollTopRef = useRef(0)
   const wasNearBottomRef = useRef(true)
@@ -122,8 +125,77 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     }
   }, [selectedLine?.lineNumber, totalLines, virtualItems, virtualizer])
 
+  /**
+   * Handle a click on a log line.
+   * - Simple click: sets the single selected line and resets anchor.
+   * - Shift+click: extends the multi-selection range from anchor to clicked line.
+   */
+  const handleLineClick = useCallback((lineNumber: number, text: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      const current = getSelectedLine(sessionId)
+      if (current !== null) {
+        // Get existing anchor, or use current selection as anchor
+        const existingSelection = selectionStore.getSelection(sessionId)
+        const anchor = existingSelection?.anchor ?? current.lineNumber
+        selectionStore.setSelection(sessionId, anchor, lineNumber)
+        // Also keep single-selection on the focused line
+        setSelectedLine(sessionId, { lineNumber, text })
+        return
+      }
+    }
+    // Simple click: reset multi-selection and set anchor
+    selectionStore.clearSelection(sessionId)
+    selectionStore.setSelection(sessionId, lineNumber, lineNumber)
+    setSelectedLine(sessionId, { lineNumber, text })
+  }, [sessionId, getSelectedLine, setSelectedLine, selectionStore])
+
+  /**
+   * Build selection state for rendering: a Set of line numbers in range.
+   */
+  const selectionRange = selectionStore.getSelection(sessionId)
+  const selectedLinesSet = useCallback(() => {
+    if (!selectionRange) {
+      const sl = selectedLine?.lineNumber
+      return sl !== undefined ? new Set([sl]) : new Set<number>()
+    }
+    const { start, end } = orderedRange(selectionRange)
+    const set = new Set<number>()
+    for (let i = start; i <= end; i++) set.add(i)
+    return set
+  }, [selectionRange, selectedLine?.lineNumber])
+
+  const selectedSet = selectedLinesSet()
+
+  // Keyboard handler with Shift+Up/Down and Ctrl+C
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+C copy
+      if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
+        // If focus is on an input/textarea or user has a manual text selection
+        // (e.g. in the Inspect panel), let the browser handle default copy behaviour
+        const target = event.target as HTMLElement
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+        if (window.getSelection() && !window.getSelection()!.isCollapsed) return
+
+        const range = selectionStore.getSelection(sessionId)
+        if (range) {
+          const { start, end } = orderedRange(range)
+          const lines: string[] = []
+          for (let i = start; i <= end; i++) {
+            const text = getLineText(i)
+            lines.push(text ?? '')
+          }
+          if (lines.length > 0) {
+            event.preventDefault()
+            navigator.clipboard.writeText(lines.join('\n')).catch(() => {
+              // Fallback: ignore clipboard errors silently
+            })
+          }
+        }
+        return
+      }
+
+      // Arrow keys
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
       const target = event.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
@@ -132,13 +204,30 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       event.preventDefault()
       const next = event.key === 'ArrowUp' ? current.lineNumber - 1 : current.lineNumber + 1
       if (next < 0 || next >= totalLines) return
+
       suppressScrollRef.current = true
       const text = getLineText(next)
       setSelectedLine(sessionId, { lineNumber: next, text: text ?? '' })
+
+      // Shift+Arrow: extend selection
+      if (event.shiftKey) {
+        const existingSelection = selectionStore.getSelection(sessionId)
+        if (existingSelection) {
+          // Keep anchor, move focus
+          selectionStore.setSelection(sessionId, existingSelection.anchor, next)
+        } else {
+          // Start new selection: anchor from previous
+          selectionStore.setSelection(sessionId, current.lineNumber, next)
+        }
+      } else {
+        // Without Shift: clear multi-selection
+        selectionStore.clearSelection(sessionId)
+        selectionStore.setSelection(sessionId, next, next)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine])
+  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine, selectionStore])
 
   return (
     <div
@@ -153,7 +242,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
           const lineNumber = vItem.index
           const text = getLineText(lineNumber)
           const segments = text !== undefined ? highlightLine(text) : undefined
-          const isSelected = selectedLine?.lineNumber === lineNumber
+          const isSelected = selectedSet.has(lineNumber)
 
           return (
             <div
@@ -172,7 +261,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
                 segments={segments}
                 isSelected={isSelected}
                 onClick={text !== undefined
-                  ? () => setSelectedLine(sessionId, { lineNumber, text })
+                  ? (e: React.MouseEvent) => handleLineClick(lineNumber, text, e.shiftKey)
                   : undefined}
               />
             </div>

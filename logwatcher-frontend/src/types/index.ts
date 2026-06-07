@@ -75,6 +75,7 @@ export interface FixFieldDto {
 export interface RootFolderDto {
   name: string
   servers: ServerDto[]
+  environmentColor?: string
 }
 
 export interface PerimeterDto {
@@ -160,6 +161,7 @@ export interface LogTab {
   activeProfileName?: string
   activeStoredFilterName?: string
   errorMessage?: string
+  environmentColor?: string
 }
 
 export type UserFontFamily = 'Cascadia Code' | 'Consolas' | 'Segoe UI' | 'Bahnschrift'

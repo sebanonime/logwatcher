@@ -132,6 +132,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
       tailMode: true,
       isFiltered: false,
       activeProfileName: matchedProfile?.name,
+      environmentColor: rootFolder?.environmentColor,
     })
     try {
       await startLogHub()

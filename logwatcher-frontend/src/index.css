@@ -897,6 +897,38 @@ select {
   color: var(--warn);
 }
 
+/* Drag & drop tab reorder */
+.tab-pill--dragging {
+  opacity: 0.4;
+}
+
+.tab-pill--drag-over {
+  border-left-width: 3px !important;
+  border-left-color: var(--accent-2) !important;
+}
+
+/* Rename input inside tab */
+.tab-pill__rename-input {
+  background: var(--surface-3);
+  border: 1px solid var(--accent-2);
+  border-radius: 4px;
+  color: var(--text-1);
+  font-family: var(--user-font-family), var(--font-mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  width: 120px;
+  outline: none;
+}
+
+/* Color dot for environment indicator */
+.tab-pill__color-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .log-virtual-list {
   height: 100%;
   overflow: auto;
@@ -1203,7 +1235,13 @@ select {
 }
 
 .context-modal__line--target {
-  background: rgba(124, 183, 255, 0.22);
+  background: rgba(124, 183, 255, 0.15);
+  outline: 3px solid var(--accent-strong);
+  outline-offset: -1px;
+  border-left: 4px solid var(--accent-strong);
+  position: sticky;
+  top: 50%;
+  transform: translateY(0);
 }
 
 .context-modal__line-text {
@@ -1784,7 +1822,6 @@ select {
   align-items: center;
   gap: 4px;
   justify-content: flex-end;
-}
 }
 
 .browser-search-toggle {

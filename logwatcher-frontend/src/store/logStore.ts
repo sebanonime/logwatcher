@@ -24,6 +24,8 @@ interface TabState {
   removeTab: (sessionId: string) => void
   setActive: (sessionId: string) => void
   updateTab: (sessionId: string, patch: Partial<LogTab>) => void
+  reorderTab: (fromIndex: number, toIndex: number) => void
+  renameTab: (sessionId: string, newName: string) => void
 }
 
 const BUFFER_MAX = 5000
@@ -105,5 +107,16 @@ export const useTabStore = create<TabState>((set) => ({
 
   updateTab: (sessionId, patch) => set(state => ({
     tabs: state.tabs.map(t => t.sessionId === sessionId ? { ...t, ...patch } : t)
+  })),
+
+  reorderTab: (fromIndex, toIndex) => set(state => {
+    const newTabs = [...state.tabs]
+    const [moved] = newTabs.splice(fromIndex, 1)
+    newTabs.splice(toIndex, 0, moved)
+    return { tabs: newTabs }
+  }),
+
+  renameTab: (sessionId, newName) => set(state => ({
+    tabs: state.tabs.map(t => t.sessionId === sessionId ? { ...t, displayName: newName } : t)
   })),
 }))
