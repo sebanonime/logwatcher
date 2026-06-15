@@ -147,6 +147,17 @@ namespace LogWatcher.Web.Sessions
                                 FilePath = FilePath,
                                 ViewVersion = ViewVersion
                             });
+
+                        // Push initial lines from the new file so the UI reloads immediately
+                        if (_index.Count > 0)
+                        {
+                            int initialFrom = Math.Max(0, _index.Count - 500);
+                            int initialCount = _index.Count - initialFrom;
+                            var initialLines = await ReadFilteredLinesAsync(initialFrom, initialCount, ct);
+                            if (initialLines.Length > 0)
+                                await SendToGroupAndOpeningClientAsync(
+                                    "OnNewLines", SessionId, initialLines, _index.Count);
+                        }
                         continue;
                     }
 

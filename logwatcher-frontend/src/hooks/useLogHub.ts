@@ -83,6 +83,30 @@ export function useLogHub() {
       updateTab(sessionId, { errorMessage: message })
     })
 
+    // On reconnect, re-join all active session groups so the client
+    // keeps receiving server→client pushes (OnNewLines, OnReload, etc.).
+    hub.onreconnected(() => {
+      const allTabs = useTabStore.getState().tabs
+      for (const tab of allTabs) {
+        try {
+          hub.invoke('OpenLog', tab.sessionId, tab.serverId, tab.filePath, {
+            encoding: 'UTF-8',
+            loadFromEnd: true,
+          }).catch(() => {})
+        } catch { /* ignore - best effort */ }
+      }
+    })
+
+    // Fallback: if the connection stays in Reconnecting for >30s,
+    // try a full restart (rare edge-case with proxy timeouts).
+    hub.onclose(async (err) => {
+      if (err) {
+        console.warn('[LogHub] Connection closed with error, restarting...', err.message)
+        await new Promise(r => setTimeout(r, 1000))
+        startLogHub().catch(console.error)
+      }
+    })
+
     startLogHub().catch(console.error)
 
     return () => {
