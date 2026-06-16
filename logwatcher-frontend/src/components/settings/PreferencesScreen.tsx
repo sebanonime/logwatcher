@@ -303,7 +303,8 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
     if (selectedProfileIndex === null) { setSelectedStoredFilterIndex(null); return }
     const filters = profilesDraft[selectedProfileIndex]?.dicoStoredFilter ?? []
     setSelectedStoredFilterIndex(filters.length > 0 ? 0 : null)
-  }, [selectedProfileIndex, profilesDraft])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProfileIndex])
 
   const selectedProfile = useMemo(
     () => selectedProfileIndex === null ? null : (profilesDraft[selectedProfileIndex] ?? null),
@@ -530,7 +531,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
                                 <input className="control-input" value={selectedStoredFilter.name} onChange={e => updateSelectedStoredFilter({ name: e.target.value })} />
                               </label>
                               <label>Filter
-                                <input className="control-input" value={selectedStoredFilter.filter} onChange={e => updateSelectedStoredFilter({ filter: e.target.value })} />
+                                <textarea className="control-input settings-stored-filter-textarea" rows={3} value={selectedStoredFilter.filter} onChange={e => updateSelectedStoredFilter({ filter: e.target.value })} />
                               </label>
                               <div className="highlight-flags-row">
                                 <label className="settings-inline-check"><input type="checkbox" checked={selectedStoredFilter.isRegex} onChange={e => updateSelectedStoredFilter({ isRegex: e.target.checked })} />Regex</label>

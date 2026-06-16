@@ -34,5 +34,11 @@
       <IsRegex>true</IsRegex>
       <CaseSensitive>false</CaseSensitive>
     </StoredFilter>
+    <StoredFilter>
+      <Name>Filter 2 lo</Name>
+      <Filter>00008598</Filter>
+      <IsRegex>true</IsRegex>
+      <CaseSensitive>false</CaseSensitive>
+    </StoredFilter>
   </DicoStoredFilter>
 </Profile>

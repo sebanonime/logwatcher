@@ -169,9 +169,36 @@ select {
   width: clamp(140px, 16vw, 220px);
 }
 
+.toolbar-filter-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 220px;
+}
+
 .toolbar-filter-input {
   flex: 1;
   min-width: 220px;
+  padding-right: 20px;
+}
+
+.toolbar-filter-input-clear {
+  position: absolute;
+  right: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-filter-input-clear:hover {
+  color: var(--text-1);
 }
 
 .control-input,
@@ -1192,7 +1219,7 @@ select {
 }
 
 .context-modal {
-  width: min(1100px, 92vw);
+  width: min(1400px, 95vw);
   max-height: 82vh;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -1549,6 +1576,14 @@ select {
 /* ─── LogBrowser Settings: stacked path form ─── */
 .settings-form-grid--stacked {
   grid-template-columns: 1fr;
+}
+
+.settings-stored-filter-textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: var(--user-font-family), var(--font-mono);
+  font-size: var(--user-font-size);
+  line-height: 1.4;
 }
 
 /* ─── Settings section divider (between list and form) ─── */

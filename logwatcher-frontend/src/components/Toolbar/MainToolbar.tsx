@@ -493,14 +493,24 @@ export function MainToolbar({
             </select>
           )}
 
-          <input
-            className="control-input toolbar-filter-input"
-            placeholder={activeTab ? 'Regex filter…' : 'Open a log to enable filtering'}
-            value={pattern}
-            disabled={!activeTab}
-            onChange={e => setPattern(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && applyFilter()}
-          />
+          <div className="toolbar-filter-input-wrap">
+            <input
+              className="control-input toolbar-filter-input"
+              placeholder={activeTab ? 'Regex filter…' : 'Open a log to enable filtering'}
+              value={pattern}
+              disabled={!activeTab}
+              onChange={e => setPattern(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applyFilter()}
+            />
+            {pattern && (
+              <button
+                className="toolbar-filter-input-clear"
+                onClick={clearFilter}
+                title="Clear filter (F8)"
+                aria-label="Clear filter"
+              >×</button>
+            )}
+          </div>
 
           <button
             onClick={applyFilter}
@@ -519,12 +529,6 @@ export function MainToolbar({
           >
             ⌕
           </button>
-
-          {activeTab?.isFiltered && (
-            <button onClick={clearFilter} className="control-button control-button--ghost toolbar-action-button" title="Clear filter (F8)">
-              ⌫
-            </button>
-          )}
         </div>
 
         <div className="toolbar-status-cluster">

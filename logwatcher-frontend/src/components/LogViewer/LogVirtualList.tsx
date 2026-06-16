@@ -233,6 +233,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     <div
       ref={parentRef}
       className="log-virtual-list"
+      tabIndex={0}
       onScroll={() => { void handleScroll() }}
     >
       <div
