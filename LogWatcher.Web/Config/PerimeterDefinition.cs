@@ -17,6 +17,7 @@ namespace LogWatcher.Web.Config
     public class RootFolderDefinition
     {
         public string Name { get; set; }
+        public string EnvironmentColor { get; set; }
         public List<ServerDefinition> Servers { get; set; } = new();
     }
 }

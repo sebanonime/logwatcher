@@ -850,6 +850,25 @@ select {
   transition: width 0.3s ease;
 }
 
+.filter-progress-bar {
+  height: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.filter-progress-bar__fill {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, var(--warn), var(--accent));
+  animation: filter-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes filter-progress-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 .index-progress-bar--indeterminate {
   width: 40% !important;
   animation: progress-slide 1.4s ease-in-out infinite;
@@ -1266,9 +1285,6 @@ select {
   outline: 3px solid var(--accent-strong);
   outline-offset: -1px;
   border-left: 4px solid var(--accent-strong);
-  position: sticky;
-  top: 50%;
-  transform: translateY(0);
 }
 
 .context-modal__line-text {

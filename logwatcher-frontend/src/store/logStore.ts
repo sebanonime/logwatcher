@@ -20,12 +20,14 @@ interface LogState {
 interface TabState {
   tabs: LogTab[]
   activeSessionId: string | null
+  filtersInProgress: Record<string, boolean>
   addTab: (tab: LogTab) => void
   removeTab: (sessionId: string) => void
   setActive: (sessionId: string) => void
   updateTab: (sessionId: string, patch: Partial<LogTab>) => void
   reorderTab: (fromIndex: number, toIndex: number) => void
   renameTab: (sessionId: string, newName: string) => void
+  setFilterInProgress: (sessionId: string, inProgress: boolean) => void
 }
 
 const BUFFER_MAX = 5000
@@ -89,6 +91,7 @@ export const useLogStore = create<LogState>((set, get) => ({
 export const useTabStore = create<TabState>((set) => ({
   tabs: [],
   activeSessionId: null,
+  filtersInProgress: {},
 
   addTab: (tab) => set(state => ({
     tabs: [...state.tabs, tab],
@@ -100,7 +103,8 @@ export const useTabStore = create<TabState>((set) => ({
     const newActive = state.activeSessionId === sessionId
       ? (newTabs[newTabs.length - 1]?.sessionId ?? null)
       : state.activeSessionId
-    return { tabs: newTabs, activeSessionId: newActive }
+    const { [sessionId]: _, ...restFilters } = state.filtersInProgress
+    return { tabs: newTabs, activeSessionId: newActive, filtersInProgress: restFilters }
   }),
 
   setActive: (sessionId) => set({ activeSessionId: sessionId }),
@@ -118,5 +122,9 @@ export const useTabStore = create<TabState>((set) => ({
 
   renameTab: (sessionId, newName) => set(state => ({
     tabs: state.tabs.map(t => t.sessionId === sessionId ? { ...t, displayName: newName } : t)
+  })),
+
+  setFilterInProgress: (sessionId, inProgress) => set(state => ({
+    filtersInProgress: { ...state.filtersInProgress, [sessionId]: inProgress }
   })),
 }))

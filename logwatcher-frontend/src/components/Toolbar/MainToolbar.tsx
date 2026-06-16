@@ -31,7 +31,7 @@ export function MainToolbar({
   onPendingPatternConsumed,
   onPendingApplyRequestConsumed,
 }: MainToolbarProps) {
-  const { tabs, activeSessionId, updateTab, setActive } = useTabStore()
+  const { tabs, activeSessionId, updateTab, setActive, setFilterInProgress } = useTabStore()
   const { setSelectedLine, getSelectedLine, getLine, clearBuffer } = useLogStore()
   const profiles = usePreferencesStore(state => state.profiles)
   const defaultHighlights = usePreferencesStore(state => state.defaultHighlights)
@@ -102,6 +102,7 @@ export function MainToolbar({
       }
 
       setIsFiltering(true)
+      setFilterInProgress(activeSessionId, true)
       clearBuffer(activeSessionId)
       updateTab(activeSessionId, { totalLines: 0 })
       try {
@@ -117,12 +118,13 @@ export function MainToolbar({
         onFilterApplied?.()
       } finally {
         setIsFiltering(false)
+        setFilterInProgress(activeSessionId, false)
       }
     }
 
     void applyFromHistory()
     onPendingApplyRequestConsumed?.()
-  }, [pendingApplyRequest, activeSessionId, activeProfile, clearBuffer, updateTab, addEntry, hub, onFilterApplied, onPendingApplyRequestConsumed])
+  }, [pendingApplyRequest, activeSessionId, activeProfile, clearBuffer, updateTab, addEntry, hub, onFilterApplied, onPendingApplyRequestConsumed, setFilterInProgress])
 
   useEffect(() => {
     if (!contextModal) return
@@ -178,8 +180,11 @@ export function MainToolbar({
     }
 
     setIsFiltering(true)
+    setFilterInProgress(activeSessionId, true)
     try {
       await hub.invoke('SetFilter', activeSessionId, filter)
+      // Drop any late OnLines responses from pre-filter requests
+      clearBuffer(activeSessionId)
       updateTab(activeSessionId, {
         isFiltered: true,
         filterPattern: selectedFilter.filter,
@@ -189,8 +194,9 @@ export function MainToolbar({
       onFilterApplied?.()
     } finally {
       setIsFiltering(false)
+      setFilterInProgress(activeSessionId, false)
     }
-  }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, onFilterApplied])
+  }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, onFilterApplied, setFilterInProgress])
 
   const applyFilter = useCallback(async () => {
     if (!activeSessionId) return
@@ -222,6 +228,7 @@ export function MainToolbar({
         }
 
     setIsFiltering(true)
+    setFilterInProgress(activeSessionId, true)
     addEntry(filterPayload.pattern.trim())
     const filter: FilterOptionsDto = {
       ...filterPayload,
@@ -247,8 +254,9 @@ export function MainToolbar({
       filterCaseSensitive: filterPayload.caseSensitive,
     })
     setIsFiltering(false)
+    setFilterInProgress(activeSessionId, false)
     onFilterApplied?.()
-  }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer])
+  }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer, setFilterInProgress])
 
   const clearFilter = useCallback(async () => {
     if (!activeSessionId) return

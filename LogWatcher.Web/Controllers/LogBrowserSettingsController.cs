@@ -32,6 +32,7 @@ namespace LogWatcher.Web.Controllers
                 RootFolders = p.RootFolders.Select(r => new
                 {
                     r.Name,
+                    r.EnvironmentColor,
                     Servers = r.Servers.Select(s => new
                     {
                         s.Id,
