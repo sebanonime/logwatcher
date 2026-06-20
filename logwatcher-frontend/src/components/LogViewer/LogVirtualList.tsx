@@ -10,6 +10,20 @@ import type { HighlightingRule } from '../../types'
 
 const LINE_HEIGHT = 20  // px — must match LogLine height
 
+/**
+ * Browser engines cap element height at roughly 33 million pixels (Chrome/Edge)
+ * or 17 million pixels (Firefox). For huge files we need to map the real scroll
+ * position proportionally into the virtualizer's coordinate space.
+ *
+ * When the total virtual height exceeds BROWSER_CAP_PX we:
+ *  1. Cap the inner container height at BROWSER_CAP_PX.
+ *  2. Override observeElementOffset so the virtualizer receives a *virtual* offset
+ *     proportional to the real scroll position across the full logical height.
+ *  3. Override scrollToFn so programmatic scrolls are mapped back to the capped DOM.
+ *  4. Scale each item's translateY by `domScale` when rendering.
+ */
+const BROWSER_CAP_PX = 15_000_000  // safe upper bound for all major browsers
+
 interface LogVirtualListProps {
   sessionId: string
   hub: HubConnection
@@ -39,15 +53,31 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const previousSelectedLineRef = useRef<number | null>(null)
   const togglingTailRef = useRef(false)
 
+  // Current virtual scroll offset (used for key-navigation viewport checks)
+  const virtualOffsetRef = useRef(0)
+
   // Tick used to force a re-render when the parent container is resized/shown
-  // (fixes bug: lines not displayed after tab position change or on initial large file load)
   const [, setLayoutTick] = useState(0)
+
+  // ── Proxy-scroll helpers for huge files ──────────────────────────────────
+  // rawTotalHeight is the logical height (may exceed browser cap).
+  const rawTotalHeight = totalLines * LINE_HEIGHT
+  const needsProxy = rawTotalHeight > BROWSER_CAP_PX
+  // domScale = DOM height / logical height  (1.0 when proxy not needed)
+  const domScale = needsProxy ? BROWSER_CAP_PX / rawTotalHeight : 1
+  const domHeight = needsProxy ? BROWSER_CAP_PX : rawTotalHeight
+
+  // Virtualizer ref so the ResizeObserver can call measure() without stale closure
+  const virtualizerRef = useRef<{ measure: () => void } | null>(null)
 
   // Observe container size; any resize/visibility change triggers a re-measure
   useEffect(() => {
     const el = parentRef.current
     if (!el) return
     const ro = new ResizeObserver(() => {
+      // Calling measure() re-calculates item positions with the new container size.
+      // This fixes lines disappearing after a tab position/layout change.
+      virtualizerRef.current?.measure()
       setLayoutTick(t => t + 1)
     })
     ro.observe(el)
@@ -59,7 +89,37 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     getScrollElement: () => parentRef.current,
     estimateSize: () => LINE_HEIGHT,
     overscan: 30,
+
+    // ── Override 1: map real DOM scroll → virtual offset ──────────────────
+    // observeElementOffset receives the Virtualizer instance; DOM element is at .scrollElement.
+    observeElementOffset: (instance, cb) => {
+      const el = instance.scrollElement
+      if (!el) return
+      const handler = () => {
+        const realMax = Math.max(1, el.scrollHeight - el.clientHeight)
+        const virtualMax = Math.max(1, rawTotalHeight - el.clientHeight)
+        const virtualOffset = (el.scrollTop / realMax) * virtualMax
+        virtualOffsetRef.current = virtualOffset
+        cb(virtualOffset, false)
+      }
+      el.addEventListener('scroll', handler, { passive: true })
+      // Also call immediately to initialise
+      handler()
+      return () => el.removeEventListener('scroll', handler)
+    },
+
+    // ── Override 2: map virtual offset → real DOM scroll ─────────────────
+    scrollToFn: (offset, _options, _instance) => {
+      const el = parentRef.current
+      if (!el) return
+      const realMax = Math.max(1, el.scrollHeight - el.clientHeight)
+      const virtualMax = Math.max(1, rawTotalHeight - el.clientHeight)
+      el.scrollTop = (offset / virtualMax) * realMax
+    },
   })
+
+  // Keep ref in sync
+  virtualizerRef.current = virtualizer
 
   const virtualItems = virtualizer.getVirtualItems()
 
@@ -224,11 +284,11 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       const isUp = event.key === 'ArrowUp'
       let next = isUp ? current.lineNumber - 1 : current.lineNumber + 1
 
-      // Clamp: stay on first / last line (fixes 3.1 and 3.2)
+      // Clamp: stay on first / last line
       if (next < 0) next = 0
       if (totalLines > 0 && next >= totalLines) next = totalLines - 1
 
-      // Already at the boundary in that direction — nothing to do
+      // Already at the boundary in that direction — nothing to do (#2 fix: stays on last line)
       if (next === current.lineNumber) return
 
       const text = getLineText(next) ?? ''
@@ -246,13 +306,20 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         selectionStore.setSelection(sessionId, next, next)
       }
 
-      // Scroll the viewport so the new selected line is always visible (fixes 3.2)
-      if (virtualItems.length > 0) {
-        const firstVisible = virtualItems[0].index
-        const lastVisible = virtualItems[virtualItems.length - 1].index
-        if (isUp && next <= firstVisible) {
+      // Scroll the viewport so the new selected line is always visible.
+      // Fix #3: use the VIRTUAL offset (not virtualItems[0].index which includes overscan)
+      // to determine the true first visible line.
+      const el = parentRef.current
+      if (el && virtualItems.length > 0) {
+        // True first visible line based on current virtual scroll offset
+        const firstTrueVisible = Math.floor(virtualOffsetRef.current / LINE_HEIGHT)
+        const clientLinesVisible = Math.floor(el.clientHeight / LINE_HEIGHT)
+        const lastTrueVisible = firstTrueVisible + clientLinesVisible - 1
+
+        if (isUp && next < firstTrueVisible) {
+          // Key up on the first visible line: scroll to reveal previous line (#3 fix)
           virtualizer.scrollToIndex(next, { align: 'start' })
-        } else if (!isUp && next >= lastVisible) {
+        } else if (!isUp && next > lastTrueVisible) {
           virtualizer.scrollToIndex(next, { align: 'end' })
         }
       }
@@ -271,8 +338,14 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       // Prevent browser text-selection when shift-clicking rows
       onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
     >
+      {/*
+        Inner container height is capped at BROWSER_CAP_PX when the logical height
+        exceeds browser limits. Item positions are scaled by domScale so they stay
+        within the capped height.  The virtualizer still operates in logical space;
+        only the DOM presentation is scaled.
+      */}
       <div
-        style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+        style={{ height: domHeight, position: 'relative' }}
       >
         {virtualItems.map(vItem => {
           const lineNumber = vItem.index
@@ -281,6 +354,9 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
           const text = getLineText(lineNumber)
           const segments = text !== undefined ? highlightLine(text) : undefined
           const isSelected = selectedSet.has(lineNumber)
+
+          // Scale the item's top offset into the capped DOM coordinate space
+          const scaledTop = vItem.start * domScale
 
           return (
             <LogLine
@@ -294,7 +370,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
                 top: 0,
                 left: 0,
                 width: '100%',
-                transform: `translateY(${vItem.start}px)`,
+                transform: `translateY(${scaledTop}px)`,
                 height: LINE_HEIGHT,
               }}
               onClick={(e: React.MouseEvent) => handleLineClick(lineNumber, text ?? '', e.shiftKey)}
