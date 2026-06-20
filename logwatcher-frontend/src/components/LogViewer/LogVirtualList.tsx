@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect } from 'react'
+import React, { useRef, useCallback, useEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { HubConnection } from '@microsoft/signalr'
 import { useVirtualLines } from '../../hooks/useVirtualLines'
@@ -29,20 +29,36 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const { totalLines, ensureRange, getLineText } = useVirtualLines(sessionId, hub)
   const { highlightLine } = useHighlighting(highlightingRules, fallbackHighlightingRules)
   const { setSelectedLine, getSelectedLine } = useLogStore()
-  const { updateTab } = useTabStore()
+  const { updateTab, activeSessionId } = useTabStore()
   const selectionStore = useSelectionStore()
+  const activeSessionIdRef = useRef(activeSessionId)
+  activeSessionIdRef.current = activeSessionId
   const selectedLine = getSelectedLine(sessionId)
   const lastScrollTopRef = useRef(0)
   const wasNearBottomRef = useRef(true)
   const previousSelectedLineRef = useRef<number | null>(null)
   const togglingTailRef = useRef(false)
-  const suppressScrollRef = useRef(false)
+
+  // Tick used to force a re-render when the parent container is resized/shown
+  // (fixes bug: lines not displayed after tab position change or on initial large file load)
+  const [, setLayoutTick] = useState(0)
+
+  // Observe container size; any resize/visibility change triggers a re-measure
+  useEffect(() => {
+    const el = parentRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setLayoutTick(t => t + 1)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const virtualizer = useVirtualizer({
     count: totalLines,
     getScrollElement: () => parentRef.current,
     estimateSize: () => LINE_HEIGHT,
-    overscan: 20,
+    overscan: 30,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
@@ -50,14 +66,24 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   // Fetch lines for the visible + overscan range
   const fetchVisible = useCallback(() => {
     if (virtualItems.length === 0) return
-    const first = virtualItems[0].index
-    const last = virtualItems[virtualItems.length - 1].index
-    ensureRange(first, last - first + 1)
+    const startLine = virtualItems[0].index
+    const lastItem = virtualItems[virtualItems.length - 1]
+    const endLine = lastItem.index
+    const lineCount = endLine - startLine + 1
+    ensureRange(startLine, lineCount)
   }, [virtualItems, ensureRange])
 
   useEffect(() => {
     fetchVisible()
   }, [fetchVisible])
+
+  // Also fetch on totalLines change (covers initial load of large files)
+  useEffect(() => {
+    if (totalLines > 0) {
+      fetchVisible()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalLines])
 
   // Auto-scroll to bottom when tail mode is on
   useEffect(() => {
@@ -105,6 +131,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     wasNearBottomRef.current = nearBottom
   }, [tailMode, hub, sessionId, updateTab])
 
+  // Scroll to keep the selected line visible
   useEffect(() => {
     const selected = selectedLine?.lineNumber
     if (selected === undefined || selected < 0 || selected >= totalLines) return
@@ -113,15 +140,13 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     previousSelectedLineRef.current = selected
     if (!hasChanged) return
 
-    if (suppressScrollRef.current) {
-      suppressScrollRef.current = false
-      return
-    }
+    if (virtualItems.length === 0) return
 
-    const firstVisible = virtualItems[0]?.index ?? 0
-    const lastVisible = virtualItems[virtualItems.length - 1]?.index ?? -1
-    if (selected < firstVisible || selected > lastVisible) {
-      virtualizer.scrollToIndex(selected, { align: 'center' })
+    const firstVisibleLine = virtualItems[0].index
+    const lastVisibleLine = virtualItems[virtualItems.length - 1].index
+
+    if (selected < firstVisibleLine || selected > lastVisibleLine) {
+      virtualizer.scrollToIndex(selected, { align: 'auto' })
     }
   }, [selectedLine?.lineNumber, totalLines, virtualItems, virtualizer])
 
@@ -134,11 +159,9 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     if (shiftKey) {
       const current = getSelectedLine(sessionId)
       if (current !== null) {
-        // Get existing anchor, or use current selection as anchor
         const existingSelection = selectionStore.getSelection(sessionId)
         const anchor = existingSelection?.anchor ?? current.lineNumber
         selectionStore.setSelection(sessionId, anchor, lineNumber)
-        // Also keep single-selection on the focused line
         setSelectedLine(sessionId, { lineNumber, text })
         return
       }
@@ -147,13 +170,15 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     selectionStore.clearSelection(sessionId)
     selectionStore.setSelection(sessionId, lineNumber, lineNumber)
     setSelectedLine(sessionId, { lineNumber, text })
+    // Transfer focus to the virtual list container so keyboard events work
+    parentRef.current?.focus()
   }, [sessionId, getSelectedLine, setSelectedLine, selectionStore])
 
   /**
    * Build selection state for rendering: a Set of line numbers in range.
    */
   const selectionRange = selectionStore.getSelection(sessionId)
-  const selectedLinesSet = useCallback(() => {
+  const selectedSet = (() => {
     if (!selectionRange) {
       const sl = selectedLine?.lineNumber
       return sl !== undefined ? new Set([sl]) : new Set<number>()
@@ -162,72 +187,80 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     const set = new Set<number>()
     for (let i = start; i <= end; i++) set.add(i)
     return set
-  }, [selectionRange, selectedLine?.lineNumber])
+  })()
 
-  const selectedSet = selectedLinesSet()
-
-  // Keyboard handler with Shift+Up/Down and Ctrl+C
+  // Keyboard handler: Arrow Up/Down (with optional Shift), Ctrl+C
+  // Only active when this tab is the active session to avoid multi-tab conflicts.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Only handle keyboard events for the currently active tab
+      if (activeSessionIdRef.current !== sessionId) return
+
+      const target = event.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return
+
       // Ctrl+C copy
       if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
-        // If focus is on an input/textarea or user has a manual text selection
-        // (e.g. in the Inspect panel), let the browser handle default copy behaviour
-        const target = event.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
-
         const range = selectionStore.getSelection(sessionId)
         if (range) {
           const { start, end } = orderedRange(range)
           const lines: string[] = []
-          for (let i = start; i <= end; i++) {
-            const text = getLineText(i)
-            lines.push(text ?? '')
-          }
+          for (let i = start; i <= end; i++) lines.push(getLineText(i) ?? '')
           if (lines.length > 0) {
             event.preventDefault()
-            navigator.clipboard.writeText(lines.join('\n')).catch(() => {
-              // Fallback: ignore clipboard errors silently
-            })
+            navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
           }
         }
         return
       }
 
-      // Arrow keys
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-      const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return
+
       const current = getSelectedLine(sessionId)
       if (current === null) return
       event.preventDefault()
-      const next = event.key === 'ArrowUp' ? current.lineNumber - 1 : current.lineNumber + 1
-      if (next < 0 || next >= totalLines) return
 
-      suppressScrollRef.current = true
-      const text = getLineText(next)
-      setSelectedLine(sessionId, { lineNumber: next, text: text ?? '' })
+      const isUp = event.key === 'ArrowUp'
+      let next = isUp ? current.lineNumber - 1 : current.lineNumber + 1
 
-      // Shift+Arrow: extend selection
+      // Clamp: stay on first / last line (fixes 3.1 and 3.2)
+      if (next < 0) next = 0
+      if (totalLines > 0 && next >= totalLines) next = totalLines - 1
+
+      // Already at the boundary in that direction — nothing to do
+      if (next === current.lineNumber) return
+
+      const text = getLineText(next) ?? ''
+      setSelectedLine(sessionId, { lineNumber: next, text })
+
       if (event.shiftKey) {
         const existingSelection = selectionStore.getSelection(sessionId)
         if (existingSelection) {
-          // Keep anchor, move focus
           selectionStore.setSelection(sessionId, existingSelection.anchor, next)
         } else {
-          // Start new selection: anchor from previous
           selectionStore.setSelection(sessionId, current.lineNumber, next)
         }
       } else {
-        // Without Shift: clear multi-selection
         selectionStore.clearSelection(sessionId)
         selectionStore.setSelection(sessionId, next, next)
       }
+
+      // Scroll the viewport so the new selected line is always visible (fixes 3.2)
+      if (virtualItems.length > 0) {
+        const firstVisible = virtualItems[0].index
+        const lastVisible = virtualItems[virtualItems.length - 1].index
+        if (isUp && next <= firstVisible) {
+          virtualizer.scrollToIndex(next, { align: 'start' })
+        } else if (!isUp && next >= lastVisible) {
+          virtualizer.scrollToIndex(next, { align: 'end' })
+        }
+      }
     }
+
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine, selectionStore])
+  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine, selectionStore, virtualItems, virtualizer])
 
   return (
     <div
@@ -235,37 +268,37 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       className="log-virtual-list"
       tabIndex={0}
       onScroll={() => { void handleScroll() }}
+      // Prevent browser text-selection when shift-clicking rows
+      onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
     >
       <div
         style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
       >
         {virtualItems.map(vItem => {
           const lineNumber = vItem.index
+          if (lineNumber < 0 || lineNumber >= totalLines) return null
+
           const text = getLineText(lineNumber)
           const segments = text !== undefined ? highlightLine(text) : undefined
           const isSelected = selectedSet.has(lineNumber)
 
           return (
-            <div
+            <LogLine
               key={vItem.key}
+              lineNumber={lineNumber}
+              text={text}
+              segments={segments}
+              isSelected={isSelected}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
                 transform: `translateY(${vItem.start}px)`,
+                height: LINE_HEIGHT,
               }}
-            >
-              <LogLine
-                lineNumber={lineNumber}
-                text={text}
-                segments={segments}
-                isSelected={isSelected}
-                onClick={text !== undefined
-                  ? (e: React.MouseEvent) => handleLineClick(lineNumber, text, e.shiftKey)
-                  : undefined}
-              />
-            </div>
+              onClick={(e: React.MouseEvent) => handleLineClick(lineNumber, text ?? '', e.shiftKey)}
+            />
           )
         })}
       </div>

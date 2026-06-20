@@ -4,8 +4,22 @@
     "Name": "EUGV",
     "RootFolders": [
       {
+        "Name": "Dev",
+        "EnvironmentColor": null,
+        "Servers": [
+          {
+            "Id": "e8707a88",
+            "Name": "LogFile",
+            "Type": "smb",
+            "Host": "C:\\TestLog\\TestLogFile",
+            "AgentId": "",
+            "Username": ""
+          }
+        ]
+      },
+      {
         "Name": "Hom",
-        "EnvironmentColor": "#f83f3f",
+        "EnvironmentColor": null,
         "Servers": [
           {
             "Id": "local1",
@@ -29,20 +43,6 @@
             "Type": "agent",
             "Host": "C:\\TestLog\\AgentFolder",
             "AgentId": "agent-01",
-            "Username": ""
-          }
-        ]
-      },
-      {
-        "Name": "Dev",
-        "EnvironmentColor": null,
-        "Servers": [
-          {
-            "Id": "e8707a88",
-            "Name": "LogFile",
-            "Type": "smb",
-            "Host": "C:\\TestLog\\TestLogFile",
-            "AgentId": "",
             "Username": ""
           }
         ]

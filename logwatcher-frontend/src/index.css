@@ -983,6 +983,8 @@ select {
   font-family: var(--user-font-family), var(--font-mono);
   font-size: var(--user-font-size);
   min-width: 0;
+  /* Prevent browser text-selection; the grid area is not a text document */
+  user-select: none;
 }
 
 .log-row {
@@ -994,6 +996,7 @@ select {
   white-space: pre;
   cursor: pointer;
   font-size: var(--user-font-size);
+  user-select: none;
 }
 
 .log-row:hover {

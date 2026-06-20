@@ -47,5 +47,12 @@
     </Highlighting>
   </DicoHighLighting>
   <DicoHiddenLog />
-  <DicoStoredFilter />
+  <DicoStoredFilter>
+    <StoredFilter>
+      <Name>coucou</Name>
+      <Filter>coucou</Filter>
+      <IsRegex>true</IsRegex>
+      <CaseSensitive>false</CaseSensitive>
+    </StoredFilter>
+  </DicoStoredFilter>
 </Profile>

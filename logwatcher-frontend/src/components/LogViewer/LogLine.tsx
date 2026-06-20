@@ -6,6 +6,7 @@ interface LogLineProps {
   text: string | undefined
   segments?: Segment[]
   isSelected?: boolean
+  style?: React.CSSProperties
   onClick?: (e: React.MouseEvent) => void
 }
 
@@ -19,6 +20,7 @@ export const LogLine = memo(function LogLine({
   text,
   segments,
   isSelected,
+  style: outerStyle,
   onClick,
 }: LogLineProps) {
   if (text === undefined) {
@@ -26,7 +28,7 @@ export const LogLine = memo(function LogLine({
     return (
       <div
         className="log-row log-row--placeholder"
-        style={{ minHeight: 20 }}
+        style={{ minHeight: 20, ...outerStyle }}
       >
         <span className="log-row__placeholder" />
       </div>
@@ -39,7 +41,7 @@ export const LogLine = memo(function LogLine({
 
   const selectedStyle = isSelected
     ? {
-        boxShadow: 'inset 0 0 0 2px var(--accent-2), inset 4px 0 0 0 var(--accent-strong)',
+        borderLeft: '4px solid var(--accent-strong)',
       }
     : undefined
 
@@ -60,11 +62,13 @@ export const LogLine = memo(function LogLine({
   return (
       <div
         className={`log-row ${isSelected ? 'log-row--selected' : ''}`}
-        style={{ minHeight: 20, ...lineStyle, ...selectedStyle }}
+        style={{ minHeight: 20, ...lineStyle, ...outerStyle }}
         onClick={onClick}
-        onMouseDown={onClick ? (e) => { if (e.button !== 0) return; onClick(e); e.preventDefault() } : undefined}
+        onMouseDown={onClick ? (e) => { if (e.button !== 0) return; onClick(e); } : undefined}
       >
-      <span className="log-row__content">{content}</span>
+      <div style={{ ...selectedStyle, width: '100%', height: '100%' }}>
+        <span className="log-row__content">{content}</span>
+      </div>
     </div>
   )
 })

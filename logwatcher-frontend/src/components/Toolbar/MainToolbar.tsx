@@ -108,7 +108,9 @@ export function MainToolbar({
       try {
         addEntry(nextPattern)
         await hub.invoke('SetFilter', activeSessionId, filter)
-        clearBuffer(activeSessionId)
+        // The server will respond via OnFileStats with the filtered line count.
+        // Do NOT clear the buffer here — the OnFileStats handler will update
+        // totalLines and clear stale data via viewVersion mismatch detection.
         updateTab(activeSessionId, {
           isFiltered: true,
           filterPattern: nextPattern,
@@ -183,8 +185,9 @@ export function MainToolbar({
     setFilterInProgress(activeSessionId, true)
     try {
       await hub.invoke('SetFilter', activeSessionId, filter)
-      // Drop any late OnLines responses from pre-filter requests
-      clearBuffer(activeSessionId)
+      // The server will respond via OnFileStats with the filtered line count.
+      // Do NOT clear the buffer here — the OnFileStats handler will update
+      // totalLines and clear stale data via viewVersion mismatch detection.
       updateTab(activeSessionId, {
         isFiltered: true,
         filterPattern: selectedFilter.filter,
@@ -244,8 +247,9 @@ export function MainToolbar({
     clearBuffer(activeSessionId)
     updateTab(activeSessionId, { totalLines: 0 })
     await hub.invoke('SetFilter', activeSessionId, filter)
-    // Drop any late OnLines responses from pre-filter requests.
-    clearBuffer(activeSessionId)
+    // The server will respond via OnFileStats with the filtered line count.
+    // Do NOT clear the buffer here — the OnFileStats handler will update
+    // totalLines and clear stale data via viewVersion mismatch detection.
 
     updateTab(activeSessionId, {
       isFiltered: true,

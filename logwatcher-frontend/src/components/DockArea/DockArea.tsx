@@ -148,6 +148,8 @@ export function DockArea({ hub }: DockAreaProps) {
               key={tab.sessionId}
               draggable
               onClick={() => setActive(tab.sessionId)}
+              onAuxClick={e => { if (e.button === 1) { e.preventDefault(); handleClose(e, tab.sessionId) } }}
+              onMouseDown={e => { if (e.button === 1) e.preventDefault() }}
               onDoubleClick={() => handleStartRename(tab.sessionId, tab.displayName)}
               onContextMenu={event => {
                 event.preventDefault()
