@@ -116,6 +116,74 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     lastScrollTopRef.current = currentTop
   }, [windowStartIndex, currentBufferCount, totalLines, tailMode, sessionId, hub, updateTab])
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault() // Évite le scroll natif du container par défaut
+
+    const selectedLine = getSelectedLine(sessionId)
+    let nextLineNumber = selectedLine ? selectedLine.lineNumber : 0
+
+    if (e.key === 'ArrowDown') {
+      nextLineNumber = Math.min(totalLines - 1, nextLineNumber + 1)
+    } else if (e.key === 'ArrowUp') {
+      nextLineNumber = Math.max(0, nextLineNumber - 1)
+    }
+
+    // Si on change effectivement de ligne
+    if (!selectedLine || nextLineNumber !== selectedLine.lineNumber) {
+      const text = getLineText(nextLineNumber) ?? ''
+
+      if (e.shiftKey) {
+        // MULTI-SÉLECTION (Shift + Up/Down)
+        const existingSelection = selectionStore.getSelection(sessionId)
+        const anchor = existingSelection?.anchor ?? (selectedLine?.lineNumber ?? nextLineNumber)
+        selectionStore.setSelection(sessionId, anchor, nextLineNumber)
+      } else {
+        // SÉLECTION SIMPLE
+        selectionStore.clearSelection(sessionId)
+        selectionStore.setSelection(sessionId, nextLineNumber, nextLineNumber)
+      }
+
+      // Met à jour la ligne active (le curseur)
+      setSelectedLine(sessionId, { lineNumber: nextLineNumber, text })
+
+      // ── GESTION DU SCROLL AUTOMATIQUE ──
+      // 1. Vérifier si la cible est en dehors du buffer local actuel
+      if (nextLineNumber < windowStartIndex) {
+        // On recule la fenêtre vers le haut
+        const newStart = Math.max(0, nextLineNumber - 10) // marge de 10 lignes
+        setWindowStartIndex(newStart)
+        
+        // On laisse le useEffect du virtualItems se déclencher et on scroll après coup
+        setTimeout(() => {
+          virtualizer.scrollToIndex(nextLineNumber - newStart, { align: 'start' })
+        }, 0)
+      } else if (nextLineNumber >= windowStartIndex + currentBufferCount) {
+        // On avance la fenêtre vers le bas
+        const newStart = Math.min(totalLines - BUFFER_PAGE_SIZE, nextLineNumber - BUFFER_PAGE_SIZE + 20)
+        setWindowStartIndex(newStart)
+
+        setTimeout(() => {
+          virtualizer.scrollToIndex(nextLineNumber - newStart, { align: 'end' })
+        }, 0)
+      } else {
+        // La ligne est dans le buffer local, utilisation directe du virtualiseur
+        const localIndex = nextLineNumber - windowStartIndex
+        virtualizer.scrollToIndex(localIndex, { align: 'auto' })
+      }
+    }
+  }, [
+    sessionId,
+    totalLines,
+    windowStartIndex,
+    currentBufferCount,
+    getSelectedLine,
+    getLineText,
+    selectionStore,
+    setSelectedLine,
+    virtualizer
+  ])
+
   // ── ACTIONS DES BOUTONS DE SAUT EXPLICITE ─────────────────────────────────
   const handleGoToStart = useCallback(async () => {
     updateTab(sessionId, { tailMode: false })
@@ -237,6 +305,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         className="log-virtual-list"
         tabIndex={0}
         onScroll={handleScroll}
+        onKeyDown={handleKeyDown}
         onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
         style={{ flex: 1, outline: 'none' }}
       >
