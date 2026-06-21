@@ -9,7 +9,7 @@ import { LogLine } from './LogLine'
 import type { HighlightingRule } from '../../types'
 
 const LINE_HEIGHT = 20  // px
-const VIRTUAL_VIEWPORT_LINES = 40_000 // Taille maximale du buffer local du DOM
+const BUFFER_PAGE_SIZE = 40_000 // Taille de la page locale dans le DOM
 
 interface LogVirtualListProps {
   sessionId: string
@@ -30,18 +30,18 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const activeSessionIdRef = useRef(activeSessionId)
   activeSessionIdRef.current = activeSessionId
 
-  // Fenêtrage glissant local
+  // L'index global de départ de notre pagination/buffer
   const [windowStartIndex, setWindowStartIndex] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
-  
-  const currentBufferCount = Math.min(totalLines, VIRTUAL_VIEWPORT_LINES)
-  const lastScrollTopRef = useRef(0)
-  const isAdjustingScrollRef = useRef(false)
 
-  // Recalage automatique en fin de fichier sur activation du Tail Mode
+  // Nombre de lignes affichables dans la page courante
+  const currentBufferCount = Math.min(totalLines - windowStartIndex, BUFFER_PAGE_SIZE)
+  const lastScrollTopRef = useRef(0)
+
+  // Gestion du Tail Mode (Suivi de fin de fichier)
   useEffect(() => {
-    if (tailMode && totalLines > VIRTUAL_VIEWPORT_LINES) {
-      setWindowStartIndex(totalLines - VIRTUAL_VIEWPORT_LINES)
+    if (tailMode && totalLines > BUFFER_PAGE_SIZE) {
+      setWindowStartIndex(totalLines - BUFFER_PAGE_SIZE)
       setTimeout(() => {
         if (parentRef.current) {
           parentRef.current.scrollTop = parentRef.current.scrollHeight
@@ -50,8 +50,9 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     }
   }, [tailMode, totalLines])
 
+  // Virtualiseur standard, sans aucune modification de comportement
   const virtualizer = useVirtualizer({
-    count: currentBufferCount,
+    count: Math.max(0, currentBufferCount),
     getScrollElement: () => parentRef.current,
     estimateSize: () => LINE_HEIGHT,
     overscan: 25,
@@ -59,82 +60,67 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
 
   const virtualItems = virtualizer.getVirtualItems()
 
+  // Déclenchement du fetch SignalR (via useVirtualLines)
   useEffect(() => {
     if (virtualItems.length === 0) return
     const globalStart = windowStartIndex + virtualItems[0].index
     ensureRange(globalStart, virtualItems.length)
   }, [virtualItems, windowStartIndex, ensureRange])
 
-  // Gestionnaire de défilement transparent
+  // Gestion du scroll simplifiée (Infinite Scroll par page)
   const handleScroll = useCallback(() => {
     const el = parentRef.current
     if (!el) return
 
     const currentTop = el.scrollTop
     setScrollTop(currentTop)
-    
+
     const maxScroll = el.scrollHeight - el.clientHeight
     const scrollingUp = currentTop < lastScrollTopRef.current
 
-    if (isAdjustingScrollRef.current) {
-      lastScrollTopRef.current = currentTop
-      isAdjustingScrollRef.current = false
-      return
+    // INFINITE SCROLL : Si on arrive près du bas de la page courante, on pousse la fenêtre vers le bas
+    if (!scrollingUp && maxScroll - currentTop < 200 && (windowStartIndex + BUFFER_PAGE_SIZE) < totalLines) {
+      const step = 5000
+      const oldStartIndex = windowStartIndex
+      
+      setWindowStartIndex(prev => {
+        const nextIndex = Math.min(totalLines - BUFFER_PAGE_SIZE, prev + step)
+        const effectiveStep = nextIndex - oldStartIndex // Nombre réel de lignes sautées
+        
+        if (effectiveStep > 0) {
+          // On ajuste immédiatement le scrollTop du DOM pour compenser le changement d'index
+          // On recule le scroll de (lignes sautées * hauteur d'une ligne)
+          const scrollCompensation = effectiveStep * LINE_HEIGHT
+          el.scrollTop = currentTop - scrollCompensation
+          lastScrollTopRef.current = currentTop - scrollCompensation
+        }
+        
+        return nextIndex
+      })
+      return // On sort pour éviter d'exécuter la logique de Tail mode sur un scroll technique
     }
 
-    if (!tailMode && totalLines > VIRTUAL_VIEWPORT_LINES) {
-      // Seuil haut atteint -> glissement vers le début
-      if (scrollingUp && currentTop < 4000 && windowStartIndex > 0) {
-        const stepLines = 4000
-        const nextStart = Math.max(0, windowStartIndex - stepLines)
-        const actualDeltaLines = windowStartIndex - nextStart
-
-        isAdjustingScrollRef.current = true
-        setWindowStartIndex(nextStart)
-        el.scrollTop = currentTop + (actualDeltaLines * LINE_HEIGHT)
-        lastScrollTopRef.current = el.scrollTop
-        return
-      }
-
-      // Seuil bas atteint -> glissement vers la fin
-      if (!scrollingUp && (maxScroll - currentTop) < 4000 && (windowStartIndex + VIRTUAL_VIEWPORT_LINES) < totalLines) {
-        const stepLines = 4000
-        const nextStart = Math.min(totalLines - VIRTUAL_VIEWPORT_LINES, stepLines + windowStartIndex)
-        const actualDeltaLines = nextStart - windowStartIndex
-
-        isAdjustingScrollRef.current = true
-        setWindowStartIndex(nextStart)
-        el.scrollTop = currentTop - (actualDeltaLines * LINE_HEIGHT)
-        lastScrollTopRef.current = el.scrollTop
-        return
-      }
-    }
-
-    // Débrayage si remontée manuelle importante
+    // Débrayage du mode Tail si remontée manuelle
     if (tailMode && scrollingUp && currentTop < maxScroll - 40) {
       updateTab(sessionId, { tailMode: false })
       hub.invoke('SetTail', sessionId, false).catch(() => {})
     }
 
-    // Réactivation automatique si on touche le fond absolu
-    const isAtAbsoluteBottom = totalLines <= VIRTUAL_VIEWPORT_LINES 
-      ? (maxScroll - currentTop <= 10)
-      : (windowStartIndex >= (totalLines - VIRTUAL_VIEWPORT_LINES) && (maxScroll - currentTop <= 10))
-
+    // Réactivation du mode Tail si fond absolu atteint
+    const isAtAbsoluteBottom = (windowStartIndex + currentBufferCount >= totalLines) && (maxScroll - currentTop <= 10)
     if (!tailMode && isAtAbsoluteBottom && totalLines > 0) {
       updateTab(sessionId, { tailMode: true })
       hub.invoke('SetTail', sessionId, true).catch(() => {})
     }
 
     lastScrollTopRef.current = currentTop
-  }, [windowStartIndex, totalLines, tailMode, sessionId, hub, updateTab])
+  }, [windowStartIndex, currentBufferCount, totalLines, tailMode, sessionId, hub, updateTab])
 
-  // ── ACTIONS DE SAUT DIRECT ─────────────────────────────────────────
+  // ── ACTIONS DES BOUTONS DE SAUT EXPLICITE ─────────────────────────────────
   const handleGoToStart = useCallback(async () => {
     updateTab(sessionId, { tailMode: false })
     try { await hub.invoke('SetTail', sessionId, false) } catch {}
 
-    isAdjustingScrollRef.current = true
     setWindowStartIndex(0)
     if (parentRef.current) {
       parentRef.current.scrollTop = 0
@@ -147,8 +133,8 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     updateTab(sessionId, { tailMode: true })
     try { await hub.invoke('SetTail', sessionId, true) } catch {}
 
-    if (totalLines > VIRTUAL_VIEWPORT_LINES) {
-      setWindowStartIndex(totalLines - VIRTUAL_VIEWPORT_LINES)
+    if (totalLines > BUFFER_PAGE_SIZE) {
+      setWindowStartIndex(totalLines - BUFFER_PAGE_SIZE)
     }
     setTimeout(() => {
       if (parentRef.current) {
@@ -194,24 +180,21 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     return set
   })()
 
-  // Calcul exact de la visibilité des boutons
+  // Visibilité des boutons
   const maxScrollPossible = parentRef.current ? Math.max(0, parentRef.current.scrollHeight - parentRef.current.clientHeight) : 0
   
   const showGoToStart = windowStartIndex > 0 || scrollTop > 20
-  
-  // Correction pour les petits fichiers : si on a du contenu scrollable et qu'on n'est pas en bas, ou si la fenêtre glissante n'a pas atteint la fin
   const showGoToEnd = totalLines > 0 && (
-    totalLines > VIRTUAL_VIEWPORT_LINES 
-      ? (windowStartIndex < totalLines - VIRTUAL_VIEWPORT_LINES || (maxScrollPossible - scrollTop > 20))
+    totalLines > BUFFER_PAGE_SIZE 
+      ? (windowStartIndex + currentBufferCount < totalLines || (maxScrollPossible - scrollTop > 20))
       : (maxScrollPossible - scrollTop > 20)
   )
 
-  // Style sans opacité/transparence et calé à droite à 6px
   const baseButtonStyle: React.CSSProperties = {
     position: 'absolute',
     right: '6px', 
     zIndex: 20,
-    background: 'var(--bg-3, #3f4450)', // Couleur légèrement plus contrastée par défaut pour ressortir sur les longs textes
+    background: 'var(--bg-3, #3f4450)',
     color: 'var(--text-1, #ffffff)',
     border: '1px solid var(--border, #434955)',
     padding: '4px 8px',
@@ -220,14 +203,13 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     fontSize: '11px',
     fontWeight: '600',
     boxShadow: '0 2px 5px rgba(0,0,0,0.6)',
-    opacity: 1, // Transparence supprimée à 100%
+    opacity: 1,
     transition: 'background-color 0.1s',
   }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       
-      {/* BOUTON HAUT */}
       {showGoToStart && (
         <button
           onClick={handleGoToStart}
@@ -239,7 +221,6 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         </button>
       )}
 
-      {/* BOUTON BAS */}
       {showGoToEnd && (
         <button
           onClick={handleGoToEnd}
@@ -251,7 +232,6 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         </button>
       )}
 
-      {/* ZONE DE SCROLL DES LOGS */}
       <div
         ref={parentRef}
         className="log-virtual-list"
