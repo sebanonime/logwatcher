@@ -192,7 +192,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
 
   const baseButtonStyle: React.CSSProperties = {
     position: 'absolute',
-    right: '6px', 
+    right: '8px', 
     zIndex: 20,
     background: 'var(--bg-3, #3f4450)',
     color: 'var(--text-1, #ffffff)',
@@ -213,22 +213,22 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       {showGoToStart && (
         <button
           onClick={handleGoToStart}
-          style={{ ...baseButtonStyle, top: '8px' }}
+          style={{ ...baseButtonStyle, top: '7px' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2, #2d3139)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-3, #3f4450)')}
         >
-          ▲ Début
+          ▲ Start
         </button>
       )}
 
       {showGoToEnd && (
         <button
           onClick={handleGoToEnd}
-          style={{ ...baseButtonStyle, bottom: '8px' }}
+          style={{ ...baseButtonStyle, bottom: '7px' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2, #2d3139)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-3, #3f4450)')}
         >
-          ▼ Fin
+          ▼ End
         </button>
       )}
 
