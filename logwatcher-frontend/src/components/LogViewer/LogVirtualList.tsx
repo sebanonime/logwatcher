@@ -8,21 +8,8 @@ import { useSelectionStore, orderedRange } from '../../store/selectionStore'
 import { LogLine } from './LogLine'
 import type { HighlightingRule } from '../../types'
 
-const LINE_HEIGHT = 20  // px — must match LogLine height
-
-/**
- * Browser engines cap element height at roughly 33 million pixels (Chrome/Edge)
- * or 17 million pixels (Firefox). For huge files we need to map the real scroll
- * position proportionally into the virtualizer's coordinate space.
- *
- * When the total virtual height exceeds BROWSER_CAP_PX we:
- *  1. Cap the inner container height at BROWSER_CAP_PX.
- *  2. Override observeElementOffset so the virtualizer receives a *virtual* offset
- *     proportional to the real scroll position across the full logical height.
- *  3. Override scrollToFn so programmatic scrolls are mapped back to the capped DOM.
- *  4. Scale each item's translateY by `domScale` when rendering.
- */
-const BROWSER_CAP_PX = 15_000_000  // safe upper bound for all major browsers
+const LINE_HEIGHT = 20  // px
+const VIRTUAL_VIEWPORT_LINES = 40_000 // Taille maximale du buffer local du DOM
 
 interface LogVirtualListProps {
   sessionId: string
@@ -32,12 +19,6 @@ interface LogVirtualListProps {
   tailMode: boolean
 }
 
-/**
- * The core virtual list component.
- * Uses TanStack Virtual to render only ~20-50 rows at a time regardless of file size.
- * Fetches missing line chunks from the server as the user scrolls.
- * Supports multi-line selection with Shift+click and Shift+arrows, and Ctrl+C copy.
- */
 export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHighlightingRules = [], tailMode }: LogVirtualListProps) {
   const parentRef = useRef<HTMLDivElement>(null)
   const { totalLines, ensureRange, getLineText } = useVirtualLines(sessionId, hub)
@@ -45,176 +26,129 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const { setSelectedLine, getSelectedLine } = useLogStore()
   const { updateTab, activeSessionId } = useTabStore()
   const selectionStore = useSelectionStore()
+  
   const activeSessionIdRef = useRef(activeSessionId)
   activeSessionIdRef.current = activeSessionId
-  const selectedLine = getSelectedLine(sessionId)
+
+  // Fenêtrage glissant local
+  const [windowStartIndex, setWindowStartIndex] = useState(0)
+  
+  const currentBufferCount = Math.min(totalLines, VIRTUAL_VIEWPORT_LINES)
   const lastScrollTopRef = useRef(0)
-  const wasNearBottomRef = useRef(true)
-  const previousSelectedLineRef = useRef<number | null>(null)
-  const togglingTailRef = useRef(false)
+  const isAdjustingScrollRef = useRef(false)
 
-  // Current virtual scroll offset (used for key-navigation viewport checks)
-  const virtualOffsetRef = useRef(0)
-
-  // Tick used to force a re-render when the parent container is resized/shown
-  const [, setLayoutTick] = useState(0)
-
-  // ── Proxy-scroll helpers for huge files ──────────────────────────────────
-  // rawTotalHeight is the logical height (may exceed browser cap).
-  const rawTotalHeight = totalLines * LINE_HEIGHT
-  const needsProxy = rawTotalHeight > BROWSER_CAP_PX
-  // domScale = DOM height / logical height  (1.0 when proxy not needed)
-  const domScale = needsProxy ? BROWSER_CAP_PX / rawTotalHeight : 1
-  const domHeight = needsProxy ? BROWSER_CAP_PX : rawTotalHeight
-
-  // Virtualizer ref so the ResizeObserver can call measure() without stale closure
-  const virtualizerRef = useRef<{ measure: () => void } | null>(null)
-
-  // Observe container size; any resize/visibility change triggers a re-measure
+  // Recalage automatique en fin de fichier sur activation du Tail Mode
   useEffect(() => {
-    const el = parentRef.current
-    if (!el) return
-    const ro = new ResizeObserver(() => {
-      // Calling measure() re-calculates item positions with the new container size.
-      // This fixes lines disappearing after a tab position/layout change.
-      virtualizerRef.current?.measure()
-      setLayoutTick(t => t + 1)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    if (tailMode && totalLines > VIRTUAL_VIEWPORT_LINES) {
+      setWindowStartIndex(totalLines - VIRTUAL_VIEWPORT_LINES)
+      setTimeout(() => {
+        if (parentRef.current) {
+          parentRef.current.scrollTop = parentRef.current.scrollHeight
+        }
+      }, 15)
+    }
+  }, [tailMode, totalLines])
 
   const virtualizer = useVirtualizer({
-    count: totalLines,
+    count: currentBufferCount,
     getScrollElement: () => parentRef.current,
     estimateSize: () => LINE_HEIGHT,
-    overscan: 30,
-
-    // ── Override 1: map real DOM scroll → virtual offset ──────────────────
-    // observeElementOffset receives the Virtualizer instance; DOM element is at .scrollElement.
-    observeElementOffset: (instance, cb) => {
-      const el = instance.scrollElement
-      if (!el) return
-      const handler = () => {
-        const realMax = Math.max(1, el.scrollHeight - el.clientHeight)
-        const virtualMax = Math.max(1, rawTotalHeight - el.clientHeight)
-        const virtualOffset = (el.scrollTop / realMax) * virtualMax
-        virtualOffsetRef.current = virtualOffset
-        cb(virtualOffset, false)
-      }
-      el.addEventListener('scroll', handler, { passive: true })
-      // Also call immediately to initialise
-      handler()
-      return () => el.removeEventListener('scroll', handler)
-    },
-
-    // ── Override 2: map virtual offset → real DOM scroll ─────────────────
-    scrollToFn: (offset, _options, _instance) => {
-      const el = parentRef.current
-      if (!el) return
-      const realMax = Math.max(1, el.scrollHeight - el.clientHeight)
-      const virtualMax = Math.max(1, rawTotalHeight - el.clientHeight)
-      el.scrollTop = (offset / virtualMax) * realMax
-    },
+    overscan: 25,
   })
-
-  // Keep ref in sync
-  virtualizerRef.current = virtualizer
 
   const virtualItems = virtualizer.getVirtualItems()
 
-  // Fetch lines for the visible + overscan range
-  const fetchVisible = useCallback(() => {
+  useEffect(() => {
     if (virtualItems.length === 0) return
-    const startLine = virtualItems[0].index
-    const lastItem = virtualItems[virtualItems.length - 1]
-    const endLine = lastItem.index
-    const lineCount = endLine - startLine + 1
-    ensureRange(startLine, lineCount)
-  }, [virtualItems, ensureRange])
+    const globalStart = windowStartIndex + virtualItems[0].index
+    ensureRange(globalStart, virtualItems.length)
+  }, [virtualItems, windowStartIndex, ensureRange])
 
-  useEffect(() => {
-    fetchVisible()
-  }, [fetchVisible])
-
-  // Also fetch on totalLines change (covers initial load of large files)
-  useEffect(() => {
-    if (totalLines > 0) {
-      fetchVisible()
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totalLines])
-
-  // Auto-scroll to bottom when tail mode is on
-  useEffect(() => {
-    if (tailMode && totalLines > 0) {
-      virtualizer.scrollToIndex(totalLines - 1, { align: 'end' })
-      wasNearBottomRef.current = true
-    }
-  }, [tailMode, totalLines, virtualizer])
-
-  const handleScroll = useCallback(async () => {
+  // Gestionnaire de défilement transparent
+  const handleScroll = useCallback(() => {
     const el = parentRef.current
     if (!el) return
 
     const currentTop = el.scrollTop
+    const maxScroll = el.scrollHeight - el.clientHeight
     const scrollingUp = currentTop < lastScrollTopRef.current
-    const nearBottom = el.scrollHeight - el.clientHeight - currentTop <= 8
 
-    // If user was at bottom and starts scrolling up, disable tail automatically.
-    if (tailMode && scrollingUp && wasNearBottomRef.current && !nearBottom && !togglingTailRef.current) {
-      togglingTailRef.current = true
-      updateTab(sessionId, { tailMode: false })
-      try {
-        await hub.invoke('SetTail', sessionId, false)
-      } catch {
-        // Keep local tail state off; transport errors are surfaced elsewhere.
-      } finally {
-        togglingTailRef.current = false
+    if (isAdjustingScrollRef.current) {
+      lastScrollTopRef.current = currentTop
+      isAdjustingScrollRef.current = false
+      return
+    }
+
+    if (!tailMode && totalLines > VIRTUAL_VIEWPORT_LINES) {
+      // Seuil haut atteint -> glissement vers le début
+      if (scrollingUp && currentTop < 4000 && windowStartIndex > 0) {
+        const stepLines = 4000
+        const nextStart = Math.max(0, windowStartIndex - stepLines)
+        const actualDeltaLines = windowStartIndex - nextStart
+
+        isAdjustingScrollRef.current = true
+        setWindowStartIndex(nextStart)
+        el.scrollTop = currentTop + (actualDeltaLines * LINE_HEIGHT)
+        lastScrollTopRef.current = el.scrollTop
+        return
+      }
+
+      // Seuil bas atteint -> glissement vers la fin
+      if (!scrollingUp && (maxScroll - currentTop) < 4000 && (windowStartIndex + VIRTUAL_VIEWPORT_LINES) < totalLines) {
+        const stepLines = 4000
+        const nextStart = Math.min(totalLines - VIRTUAL_VIEWPORT_LINES, windowStartIndex + stepLines)
+        const actualDeltaLines = nextStart - windowStartIndex
+
+        isAdjustingScrollRef.current = true
+        setWindowStartIndex(nextStart)
+        el.scrollTop = currentTop - (actualDeltaLines * LINE_HEIGHT)
+        lastScrollTopRef.current = el.scrollTop
+        return
       }
     }
 
-    // If user reaches bottom while tail is off, re-enable tail automatically.
-    if (!tailMode && nearBottom && !wasNearBottomRef.current && !togglingTailRef.current) {
-      togglingTailRef.current = true
+    // Débrayage si remontée manuelle importante
+    if (tailMode && scrollingUp && currentTop < maxScroll - 40) {
+      updateTab(sessionId, { tailMode: false })
+      hub.invoke('SetTail', sessionId, false).catch(() => {})
+    }
+
+    // Réactivation automatique si on touche le fond absolu
+    const isAtAbsoluteBottom = windowStartIndex >= (totalLines - VIRTUAL_VIEWPORT_LINES) && (maxScroll - currentTop <= 10)
+    if (!tailMode && isAtAbsoluteBottom) {
       updateTab(sessionId, { tailMode: true })
-      try {
-        await hub.invoke('SetTail', sessionId, true)
-      } catch {
-        // Keep local tail state on; transport errors are surfaced elsewhere.
-      } finally {
-        togglingTailRef.current = false
-      }
+      hub.invoke('SetTail', sessionId, true).catch(() => {})
     }
 
     lastScrollTopRef.current = currentTop
-    wasNearBottomRef.current = nearBottom
-  }, [tailMode, hub, sessionId, updateTab])
+  }, [windowStartIndex, totalLines, tailMode, sessionId, hub, updateTab])
 
-  // Scroll to keep the selected line visible
-  useEffect(() => {
-    const selected = selectedLine?.lineNumber
-    if (selected === undefined || selected < 0 || selected >= totalLines) return
+  // ── ACTION : SAUT DIRECT AU DÉBUT ─────────────────────────────────────────
+  const handleGoToStart = useCallback(async () => {
+    // 1. Désactiver le Tail Mode côté UI et serveur
+    updateTab(sessionId, { tailMode: false })
+    try {
+      await hub.invoke('SetTail', sessionId, false)
+    } catch {}
 
-    const hasChanged = previousSelectedLineRef.current !== selected
-    previousSelectedLineRef.current = selected
-    if (!hasChanged) return
-
-    if (virtualItems.length === 0) return
-
-    const firstVisibleLine = virtualItems[0].index
-    const lastVisibleLine = virtualItems[virtualItems.length - 1].index
-
-    if (selected < firstVisibleLine || selected > lastVisibleLine) {
-      virtualizer.scrollToIndex(selected, { align: 'auto' })
+    // 2. Réinitialiser la fenêtre glissante à l'index 0
+    isAdjustingScrollRef.current = true
+    setWindowStartIndex(0)
+    
+    // 3. Forcer le scroll tout en haut
+    if (parentRef.current) {
+      parentRef.current.scrollTop = 0
+      lastScrollTopRef.current = 0
     }
-  }, [selectedLine?.lineNumber, totalLines, virtualItems, virtualizer])
+  }, [sessionId, hub, updateTab])
 
-  /**
-   * Handle a click on a log line.
-   * - Simple click: sets the single selected line and resets anchor.
-   * - Shift+click: extends the multi-selection range from anchor to clicked line.
-   */
+  // Forçage de position basse en Tail Mode
+  useEffect(() => {
+    if (tailMode && parentRef.current) {
+      parentRef.current.scrollTop = parentRef.current.scrollHeight
+    }
+  }, [tailMode, totalLines, windowStartIndex])
+
   const handleLineClick = useCallback((lineNumber: number, text: string, shiftKey: boolean) => {
     if (shiftKey) {
       const current = getSelectedLine(sessionId)
@@ -226,19 +160,15 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         return
       }
     }
-    // Simple click: reset multi-selection and set anchor
     selectionStore.clearSelection(sessionId)
     selectionStore.setSelection(sessionId, lineNumber, lineNumber)
     setSelectedLine(sessionId, { lineNumber, text })
-    // Transfer focus to the virtual list container so keyboard events work
     parentRef.current?.focus()
   }, [sessionId, getSelectedLine, setSelectedLine, selectionStore])
 
-  /**
-   * Build selection state for rendering: a Set of line numbers in range.
-   */
   const selectionRange = selectionStore.getSelection(sessionId)
   const selectedSet = (() => {
+    const selectedLine = getSelectedLine(sessionId)
     if (!selectionRange) {
       const sl = selectedLine?.lineNumber
       return sl !== undefined ? new Set([sl]) : new Set<number>()
@@ -249,17 +179,13 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     return set
   })()
 
-  // Keyboard handler: Arrow Up/Down (with optional Shift), Ctrl+C
-  // Only active when this tab is the active session to avoid multi-tab conflicts.
+  // Raccourcis Clavier
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // Only handle keyboard events for the currently active tab
       if (activeSessionIdRef.current !== sessionId) return
-
       const target = event.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return
 
-      // Ctrl+C copy
       if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
         if (window.getSelection() && !window.getSelection()!.isCollapsed) return
         const range = selectionStore.getSelection(sessionId)
@@ -276,7 +202,6 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       }
 
       if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-
       const current = getSelectedLine(sessionId)
       if (current === null) return
       event.preventDefault()
@@ -284,11 +209,8 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       const isUp = event.key === 'ArrowUp'
       let next = isUp ? current.lineNumber - 1 : current.lineNumber + 1
 
-      // Clamp: stay on first / last line
       if (next < 0) next = 0
       if (totalLines > 0 && next >= totalLines) next = totalLines - 1
-
-      // Already at the boundary in that direction — nothing to do (#2 fix: stays on last line)
       if (next === current.lineNumber) return
 
       const text = getLineText(next) ?? ''
@@ -305,24 +227,6 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         selectionStore.clearSelection(sessionId)
         selectionStore.setSelection(sessionId, next, next)
       }
-
-      // Scroll the viewport so the new selected line is always visible.
-      // Fix #3: use the VIRTUAL offset (not virtualItems[0].index which includes overscan)
-      // to determine the true first visible line.
-      const el = parentRef.current
-      if (el && virtualItems.length > 0) {
-        // True first visible line based on current virtual scroll offset
-        const firstTrueVisible = Math.floor(virtualOffsetRef.current / LINE_HEIGHT)
-        const clientLinesVisible = Math.floor(el.clientHeight / LINE_HEIGHT)
-        const lastTrueVisible = firstTrueVisible + clientLinesVisible - 1
-
-        if (isUp && next < firstTrueVisible) {
-          // Key up on the first visible line: scroll to reveal previous line (#3 fix)
-          virtualizer.scrollToIndex(next, { align: 'start' })
-        } else if (!isUp && next > lastTrueVisible) {
-          virtualizer.scrollToIndex(next, { align: 'end' })
-        }
-      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -330,53 +234,76 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine, selectionStore, virtualItems, virtualizer])
 
   return (
-    <div
-      ref={parentRef}
-      className="log-virtual-list"
-      tabIndex={0}
-      onScroll={() => { void handleScroll() }}
-      // Prevent browser text-selection when shift-clicking rows
-      onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
-    >
-      {/*
-        Inner container height is capped at BROWSER_CAP_PX when the logical height
-        exceeds browser limits. Item positions are scaled by domScale so they stay
-        within the capped height.  The virtualizer still operates in logical space;
-        only the DOM presentation is scaled.
-      */}
+    <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* BOUTON DE SAUT RAPIDE AU DÉBUT (S'affiche si le fichier est gros et qu'on n'est pas déjà au début) */}
+      {windowStartIndex > 0 && (
+        <button
+          onClick={handleGoToStart}
+          style={{
+            position: 'absolute',
+            top: '10px',
+            right: '25px',
+            zIndex: 10,
+            background: 'var(--bg-2, #2d3139)',
+            color: 'var(--text-1, #ffffff)',
+            border: '1px solid var(--border, #434955)',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: '600',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'opacity 0.2s'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        >
+          ▲
+        </button>
+      )}
+
+      {/* ZONE DE SCROLL DES LOGS */}
       <div
-        style={{ height: domHeight, position: 'relative' }}
+        ref={parentRef}
+        className="log-virtual-list"
+        tabIndex={0}
+        onScroll={handleScroll}
+        onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
+        style={{ flex: 1, outline: 'none' }}
       >
-        {virtualItems.map(vItem => {
-          const lineNumber = vItem.index
-          if (lineNumber < 0 || lineNumber >= totalLines) return null
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
+          {virtualItems.map(vItem => {
+            const globalLineNumber = windowStartIndex + vItem.index
+            if (globalLineNumber < 0 || globalLineNumber >= totalLines) return null
 
-          const text = getLineText(lineNumber)
-          const segments = text !== undefined ? highlightLine(text) : undefined
-          const isSelected = selectedSet.has(lineNumber)
+            const text = getLineText(globalLineNumber)
+            const segments = text !== undefined ? highlightLine(text) : undefined
+            const isSelected = selectedSet.has(globalLineNumber)
 
-          // Scale the item's top offset into the capped DOM coordinate space
-          const scaledTop = vItem.start * domScale
-
-          return (
-            <LogLine
-              key={vItem.key}
-              lineNumber={lineNumber}
-              text={text}
-              segments={segments}
-              isSelected={isSelected}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${scaledTop}px)`,
-                height: LINE_HEIGHT,
-              }}
-              onClick={(e: React.MouseEvent) => handleLineClick(lineNumber, text ?? '', e.shiftKey)}
-            />
-          )
-        })}
+            return (
+              <LogLine
+                key={vItem.key}
+                lineNumber={globalLineNumber}
+                text={text}
+                segments={segments}
+                isSelected={isSelected}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${vItem.start}px)`,
+                  height: LINE_HEIGHT,
+                }}
+                onClick={(e: React.MouseEvent) => handleLineClick(globalLineNumber, text ?? '', e.shiftKey)}
+              />
+            )
+          })}
+        </div>
       </div>
     </div>
   )

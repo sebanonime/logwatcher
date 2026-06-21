@@ -997,6 +997,9 @@ select {
   cursor: pointer;
   font-size: var(--user-font-size);
   user-select: none;
+  /* Prevent long-line text from overflowing the absolutely-positioned row
+     and creating a spurious horizontal scrollbar on the virtual list. */
+  overflow: hidden;
 }
 
 .log-row:hover {
