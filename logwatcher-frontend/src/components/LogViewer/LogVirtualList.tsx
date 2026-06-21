@@ -116,6 +116,36 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     lastScrollTopRef.current = currentTop
   }, [windowStartIndex, currentBufferCount, totalLines, tailMode, sessionId, hub, updateTab])
 
+const handleCopy = useCallback((e: React.ClipboardEvent) => {
+  const selectionRange = selectionStore.getSelection(sessionId)
+  if (!selectionRange) return
+
+  // Empêche le comportement de copie par défaut (qui copierait du texte partiel ou mal formatté du DOM)
+  e.preventDefault()
+
+  // Récupération des lignes dans le bon ordre (du plus petit index au plus grand)
+  const { start, end } = orderedRange(selectionRange)
+  const linesToCopy: string[] = []
+
+  for (let i = start; i <= end; i++) {
+    const text = getLineText(i)
+    if (text !== undefined) {
+      linesToCopy.push(text)
+    }
+  }
+
+  // Jointure avec des retours à la ligne système
+  const textToClipboard = linesToCopy.join('\n')
+
+  // Injection dans le presse-papier
+  if (e.clipboardData) {
+    e.clipboardData.setData('text/plain', textToClipboard)
+  } else if (navigator.clipboard) {
+    // Fallback moderne au cas où l'événement synchrone n'a pas accès au clipboardData
+    navigator.clipboard.writeText(textToClipboard).catch(() => {})
+  }
+}, [sessionId, selectionStore, getLineText])
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault() // Évite le scroll natif du container par défaut
@@ -306,6 +336,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         tabIndex={0}
         onScroll={handleScroll}
         onKeyDown={handleKeyDown}
+        onCopy={handleCopy}
         onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
         style={{ flex: 1, outline: 'none' }}
       >
