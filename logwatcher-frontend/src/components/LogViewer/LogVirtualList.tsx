@@ -32,6 +32,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
 
   // Fenêtrage glissant local
   const [windowStartIndex, setWindowStartIndex] = useState(0)
+  const [scrollTop, setScrollTop] = useState(0)
   
   const currentBufferCount = Math.min(totalLines, VIRTUAL_VIEWPORT_LINES)
   const lastScrollTopRef = useRef(0)
@@ -70,6 +71,8 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     if (!el) return
 
     const currentTop = el.scrollTop
+    setScrollTop(currentTop)
+    
     const maxScroll = el.scrollHeight - el.clientHeight
     const scrollingUp = currentTop < lastScrollTopRef.current
 
@@ -96,7 +99,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       // Seuil bas atteint -> glissement vers la fin
       if (!scrollingUp && (maxScroll - currentTop) < 4000 && (windowStartIndex + VIRTUAL_VIEWPORT_LINES) < totalLines) {
         const stepLines = 4000
-        const nextStart = Math.min(totalLines - VIRTUAL_VIEWPORT_LINES, windowStartIndex + stepLines)
+        const nextStart = Math.min(totalLines - VIRTUAL_VIEWPORT_LINES, stepLines + windowStartIndex)
         const actualDeltaLines = nextStart - windowStartIndex
 
         isAdjustingScrollRef.current = true
@@ -114,8 +117,11 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     }
 
     // Réactivation automatique si on touche le fond absolu
-    const isAtAbsoluteBottom = windowStartIndex >= (totalLines - VIRTUAL_VIEWPORT_LINES) && (maxScroll - currentTop <= 10)
-    if (!tailMode && isAtAbsoluteBottom) {
+    const isAtAbsoluteBottom = totalLines <= VIRTUAL_VIEWPORT_LINES 
+      ? (maxScroll - currentTop <= 10)
+      : (windowStartIndex >= (totalLines - VIRTUAL_VIEWPORT_LINES) && (maxScroll - currentTop <= 10))
+
+    if (!tailMode && isAtAbsoluteBottom && totalLines > 0) {
       updateTab(sessionId, { tailMode: true })
       hub.invoke('SetTail', sessionId, true).catch(() => {})
     }
@@ -123,26 +129,35 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     lastScrollTopRef.current = currentTop
   }, [windowStartIndex, totalLines, tailMode, sessionId, hub, updateTab])
 
-  // ── ACTION : SAUT DIRECT AU DÉBUT ─────────────────────────────────────────
+  // ── ACTIONS DE SAUT DIRECT ─────────────────────────────────────────
   const handleGoToStart = useCallback(async () => {
-    // 1. Désactiver le Tail Mode côté UI et serveur
     updateTab(sessionId, { tailMode: false })
-    try {
-      await hub.invoke('SetTail', sessionId, false)
-    } catch {}
+    try { await hub.invoke('SetTail', sessionId, false) } catch {}
 
-    // 2. Réinitialiser la fenêtre glissante à l'index 0
     isAdjustingScrollRef.current = true
     setWindowStartIndex(0)
-    
-    // 3. Forcer le scroll tout en haut
     if (parentRef.current) {
       parentRef.current.scrollTop = 0
+      setScrollTop(0)
       lastScrollTopRef.current = 0
     }
   }, [sessionId, hub, updateTab])
 
-  // Forçage de position basse en Tail Mode
+  const handleGoToEnd = useCallback(async () => {
+    updateTab(sessionId, { tailMode: true })
+    try { await hub.invoke('SetTail', sessionId, true) } catch {}
+
+    if (totalLines > VIRTUAL_VIEWPORT_LINES) {
+      setWindowStartIndex(totalLines - VIRTUAL_VIEWPORT_LINES)
+    }
+    setTimeout(() => {
+      if (parentRef.current) {
+        parentRef.current.scrollTop = parentRef.current.scrollHeight
+        setScrollTop(parentRef.current.scrollHeight)
+      }
+    }, 15)
+  }, [sessionId, hub, totalLines, updateTab])
+
   useEffect(() => {
     if (tailMode && parentRef.current) {
       parentRef.current.scrollTop = parentRef.current.scrollHeight
@@ -179,90 +194,60 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     return set
   })()
 
-  // Raccourcis Clavier
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (activeSessionIdRef.current !== sessionId) return
-      const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return
+  // Calcul exact de la visibilité des boutons
+  const maxScrollPossible = parentRef.current ? Math.max(0, parentRef.current.scrollHeight - parentRef.current.clientHeight) : 0
+  
+  const showGoToStart = windowStartIndex > 0 || scrollTop > 20
+  
+  // Correction pour les petits fichiers : si on a du contenu scrollable et qu'on n'est pas en bas, ou si la fenêtre glissante n'a pas atteint la fin
+  const showGoToEnd = totalLines > 0 && (
+    totalLines > VIRTUAL_VIEWPORT_LINES 
+      ? (windowStartIndex < totalLines - VIRTUAL_VIEWPORT_LINES || (maxScrollPossible - scrollTop > 20))
+      : (maxScrollPossible - scrollTop > 20)
+  )
 
-      if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
-        if (window.getSelection() && !window.getSelection()!.isCollapsed) return
-        const range = selectionStore.getSelection(sessionId)
-        if (range) {
-          const { start, end } = orderedRange(range)
-          const lines: string[] = []
-          for (let i = start; i <= end; i++) lines.push(getLineText(i) ?? '')
-          if (lines.length > 0) {
-            event.preventDefault()
-            navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
-          }
-        }
-        return
-      }
-
-      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
-      const current = getSelectedLine(sessionId)
-      if (current === null) return
-      event.preventDefault()
-
-      const isUp = event.key === 'ArrowUp'
-      let next = isUp ? current.lineNumber - 1 : current.lineNumber + 1
-
-      if (next < 0) next = 0
-      if (totalLines > 0 && next >= totalLines) next = totalLines - 1
-      if (next === current.lineNumber) return
-
-      const text = getLineText(next) ?? ''
-      setSelectedLine(sessionId, { lineNumber: next, text })
-
-      if (event.shiftKey) {
-        const existingSelection = selectionStore.getSelection(sessionId)
-        if (existingSelection) {
-          selectionStore.setSelection(sessionId, existingSelection.anchor, next)
-        } else {
-          selectionStore.setSelection(sessionId, current.lineNumber, next)
-        }
-      } else {
-        selectionStore.clearSelection(sessionId)
-        selectionStore.setSelection(sessionId, next, next)
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [sessionId, totalLines, getSelectedLine, getLineText, setSelectedLine, selectionStore, virtualItems, virtualizer])
+  // Style sans opacité/transparence et calé à droite à 6px
+  const baseButtonStyle: React.CSSProperties = {
+    position: 'absolute',
+    right: '6px', 
+    zIndex: 20,
+    background: 'var(--bg-3, #3f4450)', // Couleur légèrement plus contrastée par défaut pour ressortir sur les longs textes
+    color: 'var(--text-1, #ffffff)',
+    border: '1px solid var(--border, #434955)',
+    padding: '4px 8px',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '11px',
+    fontWeight: '600',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.6)',
+    opacity: 1, // Transparence supprimée à 100%
+    transition: 'background-color 0.1s',
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       
-      {/* BOUTON DE SAUT RAPIDE AU DÉBUT (S'affiche si le fichier est gros et qu'on n'est pas déjà au début) */}
-      {windowStartIndex > 0 && (
+      {/* BOUTON HAUT */}
+      {showGoToStart && (
         <button
           onClick={handleGoToStart}
-          style={{
-            position: 'absolute',
-            top: '10px',
-            right: '25px',
-            zIndex: 10,
-            background: 'var(--bg-2, #2d3139)',
-            color: 'var(--text-1, #ffffff)',
-            border: '1px solid var(--border, #434955)',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: '600',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'opacity 0.2s'
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          style={{ ...baseButtonStyle, top: '8px' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2, #2d3139)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-3, #3f4450)')}
         >
-          ▲
+          ▲ Début
+        </button>
+      )}
+
+      {/* BOUTON BAS */}
+      {showGoToEnd && (
+        <button
+          onClick={handleGoToEnd}
+          style={{ ...baseButtonStyle, bottom: '8px' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-2, #2d3139)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--bg-3, #3f4450)')}
+        >
+          ▼ Fin
         </button>
       )}
 
