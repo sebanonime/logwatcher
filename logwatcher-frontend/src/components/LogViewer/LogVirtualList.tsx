@@ -34,9 +34,25 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const [windowStartIndex, setWindowStartIndex] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
 
-  // Nombre de lignes affichables dans la page courante
-  const currentBufferCount = Math.min(totalLines - windowStartIndex, BUFFER_PAGE_SIZE)
+  // AJUSTEMENT SÉCURISÉ : Nombre de lignes affichables dans la page courante (garanti >= 0)
+  const currentBufferCount = Math.max(0, Math.min(totalLines - windowStartIndex, BUFFER_PAGE_SIZE))
   const lastScrollTopRef = useRef(0)
+
+  // EFFET OPTIONNEL/RECOMMANDÉ : Gestion de la réinitialisation lors du File Rolling
+  useEffect(() => {
+    if (totalLines < windowStartIndex) {
+      setWindowStartIndex(0)
+      setScrollTop(0)
+      lastScrollTopRef.current = 0
+      
+      if (parentRef.current) {
+        parentRef.current.scrollTop = 0
+      }
+      
+      // Force la recalculation des dimensions internes du virtualiseur
+      virtualizer.measure()
+    }
+  }, [totalLines, windowStartIndex])
 
   // Gestion du Tail Mode (Suivi de fin de fichier)
   useEffect(() => {
@@ -116,35 +132,35 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     lastScrollTopRef.current = currentTop
   }, [windowStartIndex, currentBufferCount, totalLines, tailMode, sessionId, hub, updateTab])
 
-const handleCopy = useCallback((e: React.ClipboardEvent) => {
-  const selectionRange = selectionStore.getSelection(sessionId)
-  if (!selectionRange) return
+  const handleCopy = useCallback((e: React.ClipboardEvent) => {
+    const selectionRange = selectionStore.getSelection(sessionId)
+    if (!selectionRange) return
 
-  // Empêche le comportement de copie par défaut (qui copierait du texte partiel ou mal formatté du DOM)
-  e.preventDefault()
+    // Empêche le comportement de copie par défaut (qui copierait du texte partiel ou mal formatté du DOM)
+    e.preventDefault()
 
-  // Récupération des lignes dans le bon ordre (du plus petit index au plus grand)
-  const { start, end } = orderedRange(selectionRange)
-  const linesToCopy: string[] = []
+    // Récupération des lignes dans le bon ordre (du plus petit index au plus grand)
+    const { start, end } = orderedRange(selectionRange)
+    const linesToCopy: string[] = []
 
-  for (let i = start; i <= end; i++) {
-    const text = getLineText(i)
-    if (text !== undefined) {
-      linesToCopy.push(text)
+    for (let i = start; i <= end; i++) {
+      const text = getLineText(i)
+      if (text !== undefined) {
+        linesToCopy.push(text)
+      }
     }
-  }
 
-  // Jointure avec des retours à la ligne système
-  const textToClipboard = linesToCopy.join('\n')
+    // Jointure avec des retours à la ligne système
+    const textToClipboard = linesToCopy.join('\n')
 
-  // Injection dans le presse-papier
-  if (e.clipboardData) {
-    e.clipboardData.setData('text/plain', textToClipboard)
-  } else if (navigator.clipboard) {
-    // Fallback moderne au cas où l'événement synchrone n'a pas accès au clipboardData
-    navigator.clipboard.writeText(textToClipboard).catch(() => {})
-  }
-}, [sessionId, selectionStore, getLineText])
+    // Injection dans le presse-papier
+    if (e.clipboardData) {
+      e.clipboardData.setData('text/plain', textToClipboard)
+    } else if (navigator.clipboard) {
+      // Fallback moderne au cas où l'événement synchrone n'a pas accès au clipboardData
+      navigator.clipboard.writeText(textToClipboard).catch(() => {})
+    }
+  }, [sessionId, selectionStore, getLineText])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return

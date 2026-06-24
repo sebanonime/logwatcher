@@ -55,7 +55,6 @@ namespace LogWatcher.Web.Sessions
 
         private async Task SendToGroupAndOpeningClientAsync(string method, params object[] args)
         {
-            // SendCoreAsync takes object[] directly without params wrapping
             await _logHub.Clients.Group(SessionId).SendCoreAsync(method, args);
             if (!string.IsNullOrWhiteSpace(_openingConnectionId))
                 await _logHub.Clients.Client(_openingConnectionId).SendCoreAsync(method, args);
@@ -86,8 +85,6 @@ namespace LogWatcher.Web.Sessions
                 Console.WriteLine($"[WatchSession.RunAsync] BuildAsync completed. Index.Count={_index.Count}, TotalBytes={_index.TotalBytes}");
 
                 // 2. Apply hidden-line filter using a fast single-pass byte stream scan.
-                //    This avoids the per-batch ReadLinesAsync overhead and runs at ~500 MB/s,
-                //    comparable to the indexing pass itself.
                 var hiddenLines = _activeHiddenLines;
                 if (hiddenLines.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
                 {
@@ -114,8 +111,6 @@ namespace LogWatcher.Web.Sessions
                         ViewVersion = ViewVersion
                     });
 
-                // 3b. Push initial tail lines so client renders them immediately
-                //     without relying on the pull/RequestLines mechanism.
                 if (visibleCount > 0)
                 {
                     int initialFrom = Math.Max(0, visibleCount - 500);
@@ -126,88 +121,89 @@ namespace LogWatcher.Web.Sessions
                             "OnNewLines", SessionId, initialLines, visibleCount);
                 }
 
-                // 3. Tail new content
-                await foreach (var chunk in _provider.TailAsync(FilePath, _index.TotalBytes, ct))
+                // 4. Follow and Tail new content avec cassure et recréation complète du flux sur Rolling
+                long currentTailOffset = _index.TotalBytes;
+                bool executionTerminee = false;
+
+                while (!executionTerminee && !ct.IsCancellationRequested)
                 {
-                    if (chunk.IsReset)
+                    try
                     {
-                        _index.Clear();
-                        Volatile.Write(ref _filter, null);
-                        await SendToGroupAndOpeningClientAsync("OnReload", SessionId);
-                        // Re-index from scratch
-                        var reloadStream = _provider.ReadRawAsync(FilePath, 0, ct);
-                        await _builder.BuildAsync(_index, reloadStream, null, ct);
-                        await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
-                            new FileStatsDto
-                            {
-                                TotalLines = _index.Count,
-                                SizeBytes = _index.TotalBytes,
-                                IsIndexed = true,
-                                ServerId = ServerId,
-                                FilePath = FilePath,
-                                ViewVersion = ViewVersion
-                            });
+                        // On instancie le flux à la position courante
+                        var tailStream = _provider.TailAsync(FilePath, currentTailOffset, ct);
 
-                        // Push initial lines from the new file so the UI reloads immediately
-                        if (_index.Count > 0)
+                        await foreach (var chunk in tailStream.WithCancellation(ct))
                         {
-                            int initialFrom = Math.Max(0, _index.Count - 500);
-                            int initialCount = _index.Count - initialFrom;
-                            var initialLines = await ReadFilteredLinesAsync(initialFrom, initialCount, ct);
-                            if (initialLines.Length > 0)
-                                await SendToGroupAndOpeningClientAsync(
-                                    "OnNewLines", SessionId, initialLines, _index.Count);
-                        }
-                        continue;
-                    }
-
-                    if (chunk.Bytes.Length == 0) continue;
-
-                    int prevCount = _index.Count;
-                    // Index the new bytes
-                    await _builder.BuildAsync(_index,
-                        ToAsyncEnum(chunk.Bytes), null, ct);
-
-                    int newCount = _index.Count - prevCount;
-                    if (newCount <= 0) continue;
-
-                    if (_tailMode && !_filterEnabled)
-                    {
-                        // No active filter: push new lines directly, filtering hidden lines inline
-                        var newLines = await ReadLinesAsync(prevCount, newCount, ct);
-                        var hiddenRules = _activeHiddenLines;
-                        if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
-                            newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
-                        if (newLines.Length > 0)
-                            await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, newLines, _index.Count);
-                    }
-                    else if (_tailMode && _filterEnabled)
-                    {
-                        // Filter active: apply filter inline, append to the filter index, and push directly.
-                        var filter = Volatile.Read(ref _filter);
-                        if (filter != null && !_isFilterBuilding)
-                        {
-                            var rawLines = await ReadLinesAsync(prevCount, newCount, ct);
-                            var visibleLines = FilterNewLinesInline(rawLines);
-                            if (visibleLines.Length > 0)
+                            if (chunk.IsReset)
                             {
-                                int filterStart = filter.Count;
-                                foreach (var line in visibleLines)
-                                    filter.Add(line.LineNumber);
-                                var remapped = visibleLines
-                                    .Select((l, i) => new LineDto { LineNumber = filterStart + i, Text = l.Text })
-                                    .ToArray();
-                                await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, remapped, filter.Count);
+                                await ExecuterResetFichierAvecRetryAsync(ct);
+                                
+                                // ✅ Le nouveau fichier est déjà indexé, on place le tail à la fin de celui-ci.
+                                currentTailOffset = _index.TotalBytes; 
+                                
+                                break; 
                             }
-                        }
-                    }
 
-                    // Always send updated stats so SizeBytes stays current, using the correct visible count
-                    int visibleForStats = _filterEnabled
-                        ? (Volatile.Read(ref _filter)?.Count ?? _index.Count)
-                        : _index.Count;
-                    await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
-                        new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+                            if (chunk.Bytes.Length == 0) continue;
+
+                            int prevCount = _index.Count;
+                            await _builder.BuildAsync(_index, ToAsyncEnum(chunk.Bytes), null, ct);
+                            currentTailOffset = _index.TotalBytes;
+
+                            int newCount = _index.Count - prevCount;
+                            if (newCount <= 0) continue;
+
+                            if (_tailMode && !_filterEnabled)
+                            {
+                                var newLines = await ReadLinesAsync(prevCount, newCount, ct);
+                                var hiddenRules = _activeHiddenLines;
+                                if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
+                                    newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
+                                if (newLines.Length > 0)
+                                    await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, newLines, _index.Count);
+                            }
+                            else if (_tailMode && _filterEnabled)
+                            {
+                                var filter = Volatile.Read(ref _filter);
+                                if (filter != null && !_isFilterBuilding)
+                                {
+                                    var rawLines = await ReadLinesAsync(prevCount, newCount, ct);
+                                    var visibleLines = FilterNewLinesInline(rawLines);
+                                    if (visibleLines.Length > 0)
+                                    {
+                                        int filterStart = filter.Count;
+                                        foreach (var line in visibleLines)
+                                            filter.Add(line.LineNumber);
+                                        var remapped = visibleLines
+                                            .Select((l, i) => new LineDto { LineNumber = filterStart + i, Text = l.Text })
+                                            .ToArray();
+                                        await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, remapped, filter.Count);
+                                    }
+                                }
+                            }
+
+                            int visibleForStats = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+                            await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                                new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+                        }
+
+                        // Si le foreach s'est terminé proprement (sans break et sans exception), on peut quitter le while
+                        // Cependant, un flux de Tail étant infini, si on sort ici sans annulation, c'est qu'il a pu se clore.
+                        // On vérifie si on a fait un break volontaire pour le rolling.
+                        if (currentTailOffset == 0 && !ct.IsCancellationRequested)
+                        {
+                            // On continue la boucle while pour re-tailer à 0
+                            continue;
+                        }
+
+                        executionTerminee = true;
+                    }
+                    catch (Exception ex) when (ex is FileNotFoundException || ex is IOException)
+                    {
+                        Console.WriteLine($"[WatchSession] Fichier temporairement inaccessible ({ex.Message}). Démarrage de la boucle de résilience...");
+                        await ExecuterResetFichierAvecRetryAsync(ct);
+                        currentTailOffset = _index.TotalBytes;
+                    }
                 }
             }
             catch (OperationCanceledException) { }
@@ -217,16 +213,79 @@ namespace LogWatcher.Web.Sessions
             }
         }
 
+        private async Task ExecuterResetFichierAvecRetryAsync(CancellationToken ct)
+        {
+            bool fichierPret = false;
+            int tentatives = 0;
+
+            while (!fichierPret && !ct.IsCancellationRequested)
+            {
+                try
+                {
+                    tentatives++;
+                    using (var fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    {
+                        fichierPret = true; 
+                    }
+                }
+                catch (Exception ex) when (ex is FileNotFoundException || ex is IOException)
+                {
+                    if (tentatives % 10 == 1)
+                    {
+                        Console.WriteLine($"[WatchSession] En attente du nouveau fichier sur le disque ({FilePath}). Tentative #{tentatives}...");
+                    }
+                    await Task.Delay(200, ct);
+                }
+            }
+
+            if (ct.IsCancellationRequested) return;
+
+            Console.WriteLine($"[WatchSession] Nouveau fichier validé et accessible. Reconstruction complète de l'index.");
+
+            _index.Clear();
+            Volatile.Write(ref _filter, null);
+            Interlocked.Increment(ref _viewVersion);
+            
+            // Événement unitaire de nettoyage envoyé au frontend React
+            await SendToGroupAndOpeningClientAsync("OnReload", SessionId);
+            
+            // Indexation propre du fichier vierge/neuf depuis sa position initiale (0)
+            var reloadStream = _provider.ReadRawAsync(FilePath, 0, ct);
+            await _builder.BuildAsync(_index, reloadStream, null, ct);
+            
+            int visibleCount = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+            
+            await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                new FileStatsDto
+                {
+                    TotalLines = visibleCount,
+                    SizeBytes = _index.TotalBytes,
+                    IsIndexed = true,
+                    ServerId = ServerId,
+                    FilePath = FilePath,
+                    ViewVersion = ViewVersion
+                });
+
+            if (visibleCount > 0)
+            {
+                int initialFrom = Math.Max(0, visibleCount - 500);
+                int initialCount = visibleCount - initialFrom;
+                var initialLines = await ReadFilteredLinesAsync(initialFrom, initialCount, ct);
+                if (initialLines.Length > 0)
+                {
+                    await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, initialLines, visibleCount);
+                }
+            }
+        }
+
         public async Task<LineDto[]> ReadLinesAsync(int startLine, int count, CancellationToken ct = default)
         {
-            // Agent sources serve lines via RequestLines/PushRequestedLines (no raw byte access)
             var agentLines = await _provider.ReadLinesByNumberAsync(SessionId, startLine, count, ct);
             if (agentLines != null) return agentLines;
 
             var (offsets, actual) = _index.GetRange(startLine, count);
             if (actual == 0) return Array.Empty<LineDto>();
 
-            // Calculate the byte span covering all requested lines in one go
             long firstOffset = offsets[0];
             int lastLineNum = startLine + actual - 1;
             int lastByteLen = _index.GetLineByteLength(lastLineNum);
@@ -237,7 +296,6 @@ namespace LogWatcher.Web.Sessions
             if (endOffset <= firstOffset)
                 return Array.Empty<LineDto>();
 
-            // Single I/O read for the whole chunk
             var block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
 
             var results = new List<LineDto>(actual);
@@ -247,11 +305,9 @@ namespace LogWatcher.Web.Sessions
                 int byteLen = _index.GetLineByteLength(lineNum);
                 if (byteLen <= 0) continue;
 
-                // Position within the block
                 int blockOffset = (int)(offsets[i] - firstOffset);
                 if (blockOffset < 0 || blockOffset + byteLen > block.Length) continue;
 
-                // Strip trailing \r\n
                 int end = byteLen;
                 while (end > 0 && blockOffset + end - 1 < block.Length &&
                        (block[blockOffset + end - 1] == '\n' || block[blockOffset + end - 1] == '\r'))
@@ -271,15 +327,12 @@ namespace LogWatcher.Web.Sessions
             var origLines = filter.GetOriginalLineRange(startFilteredLine, count);
             if (origLines.Length == 0) return Array.Empty<LineDto>();
 
-            // Read in contiguous spans to minimise I/O calls.
-            // Group consecutive original line numbers into runs and read each run at once.
             var allResults = new Dictionary<int, LineDto>(origLines.Length);
 
             int runStart = 0;
             while (runStart < origLines.Length)
             {
                 int runEnd = runStart;
-                // Extend run while lines are close enough (within 50 lines of each other)
                 while (runEnd + 1 < origLines.Length &&
                        origLines[runEnd + 1] - origLines[runEnd] <= 50)
                     runEnd++;
@@ -299,8 +352,6 @@ namespace LogWatcher.Web.Sessions
                 results[i] = allResults.TryGetValue(origLines[i], out var dto)
                     ? dto
                     : new LineDto { LineNumber = origLines[i], Text = "" };
-                // Remap LineNumber to filtered index so the frontend buffer key
-                // matches the virtual list row index (0, 1, 2...).
                 results[i].LineNumber = startFilteredLine + i;
             }
             return results;
@@ -339,11 +390,6 @@ namespace LogWatcher.Web.Sessions
             };
         }
 
-        /// <summary>
-        /// Fast single-pass scan: streams raw bytes, splits lines, decodes once,
-        /// then applies pattern + hidden rules. This avoids thousands of small
-        /// ReadLinesAsync calls and keeps filtering close to indexing speed.
-        /// </summary>
         private async Task<FilteredLineIndex> BuildFilterFromStreamAsync(
             FilterOptionsDto options, CancellationToken ct, bool reportProgress)
         {
@@ -366,13 +412,12 @@ namespace LogWatcher.Web.Sessions
 
             var rawStream = _provider.ReadRawAsync(FilePath, 0, ct);
             int lineNumber = 0;
-            // Reuse a byte buffer for the current line to avoid per-line heap allocations.
             var lineBytes = new byte[4096];
             int lineBytesLen = 0;
 
             await foreach (var chunk in rawStream.WithCancellation(ct))
             {
-                var bytes = chunk.ToArray(); // Span not allowed in async methods (C# 12)
+                var bytes = chunk.ToArray(); 
                 for (int i = 0; i < bytes.Length; i++)
                 {
                     byte b = bytes[i];
@@ -410,7 +455,6 @@ namespace LogWatcher.Web.Sessions
                 }
             }
 
-            // Handle last line with no trailing newline
             if (lineBytesLen > 0)
             {
                 int end = lineBytesLen;
@@ -539,7 +583,6 @@ namespace LogWatcher.Web.Sessions
                     return true;
                 }
             }
-
             return false;
         }
 
@@ -632,8 +675,6 @@ namespace LogWatcher.Web.Sessions
                 .ToList();
             _activeHiddenLines = patterns;
 
-            // If the index is already complete (profile changed after initial load),
-            // apply the hidden filter in the background so hidden lines disappear.
             if (_isIndexComplete)
             {
                 _ = ClearFilterAsync();
@@ -642,7 +683,6 @@ namespace LogWatcher.Web.Sessions
 
         public void SetTail(bool tail) => _tailMode = tail;
 
-        // Agent push handler
         public async Task HandleAgentPushAsync(string[] lines, long[] offsets, bool isInitialLoad, bool isReset)
         {
             if (isReset)
