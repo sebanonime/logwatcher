@@ -732,6 +732,23 @@ namespace LogWatcher.Web.Sessions
                     await _logHub.Clients.Group(SessionId).SendAsync("OnNewLines", SessionId, dtos, _index.Count);
             }
         }
+        
+        public async Task SendCurrentStatsAsync()
+        {
+            // On calcule le nombre de lignes visibles exactement comme tu le fais déjà ailleurs
+            int visibleCount = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+            
+            await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                new FileStatsDto
+                {
+                    TotalLines = visibleCount,
+                    SizeBytes = _index.TotalBytes,
+                    IsIndexed = _isIndexComplete,
+                    ServerId = ServerId,
+                    FilePath = FilePath,
+                    ViewVersion = ViewVersion
+                });
+        }
 
         public void Stop() => _cts.Cancel();
 

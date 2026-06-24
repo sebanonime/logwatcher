@@ -83,6 +83,32 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     ensureRange(globalStart, virtualItems.length)
   }, [virtualItems, windowStartIndex, ensureRange])
 
+  // ── GESTION DE LA RECONNEXION SIGNALR (Sortie de veille du navigateur) ──
+  useEffect(() => {
+    const handleReconnected = () => {
+      console.log(`[LogVirtualList] Reconnexion détectée pour la session ${sessionId}. Resynchronisation...`)
+      
+      // Si on était en train de suivre la fin du fichier, on force le backend à 
+      // relancer le tail pour récupérer tout ce qu'on a manqué pendant la veille.
+      if (tailMode) {
+        hub.invoke('SetTail', sessionId, true).catch(err => 
+          console.error('[LogVirtualList] Erreur lors de la resynchronisation du Tail:', err)
+        )
+      } else {
+        // Optionnel : si tu as une méthode côté serveur pour forcer le renvoi des FileStats, 
+        // tu peux l'appeler ici pour mettre à jour la taille totale de l'index.
+        // hub.invoke('RequestFileStats', sessionId).catch(() => {})
+      }
+    }
+
+    // On écoute l'événement global qu'on a dispatché depuis logHubConnection.ts
+    window.addEventListener('logwatcher-reconnected', handleReconnected)
+
+    return () => {
+      window.removeEventListener('logwatcher-reconnected', handleReconnected)
+    }
+  }, [hub, sessionId, tailMode])
+
   // Gestion du scroll simplifiée (Infinite Scroll par page)
   const handleScroll = useCallback(() => {
     const el = parentRef.current

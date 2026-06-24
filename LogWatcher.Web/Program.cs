@@ -69,6 +69,11 @@ builder.Services.AddSignalR(opts =>
 {
     opts.MaximumReceiveMessageSize = 1024 * 1024; // 1 MB
     opts.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    // Envoie un ping ping "keep-alive" toutes les 15 secondes
+    opts.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    
+    // Considère le client déconnecté s'il ne répond pas pendant 30 secondes
+    opts.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 })
 .AddJsonProtocol(opts =>
 {

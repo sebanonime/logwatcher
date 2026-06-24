@@ -25,6 +25,22 @@ export function getLogHub(): signalR.HubConnection {
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)
       .build()
+
+    // --- AJOUT POUR GÉRER LA RECONNEXION ---
+    
+    connection.onreconnecting((error) => {
+      console.warn('[SignalR] Connexion perdue (mise en veille ou réseau). Reconnexion en cours...', error)
+    })
+
+    connection.onreconnected((connectionId) => {
+      console.info(`[SignalR] Reconnexion réussie (ID: ${connectionId}).`)
+      
+      // On diffuse un événement global au navigateur.
+      // Les composants React pourront l'écouter pour forcer un rafraîchissement.
+      window.dispatchEvent(new CustomEvent('logwatcher-reconnected'))
+    })
+
+    // ---------------------------------------
   }
   return connection
 }

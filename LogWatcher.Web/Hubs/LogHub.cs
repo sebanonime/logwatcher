@@ -243,6 +243,17 @@ namespace LogWatcher.Web.Hubs
                 .ToArray();
         }
 
+        // public async Task RequestFileStats(string sessionId)
+        // {
+        //     // On récupère la session via le gestionnaire injecté (_sessions)
+        //     var session = _sessions.GetSession(sessionId);
+            
+        //     if (session != null)
+        //     {
+        //         await session.SendCurrentStatsAsync();
+        //     }
+        // }
+
         private static async Task<bool> FileContainsPatternAsync(
             IFileSourceProvider provider, string path, string pattern,
             System.Text.RegularExpressions.Regex regex)
