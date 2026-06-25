@@ -1,8 +1,13 @@
 ﻿using NLog;
 using NLog.Config;
 using NLog.Targets;
+using NLog.Targets.Wrappers;
+using System;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 class Program
 {
@@ -65,29 +70,44 @@ class Program
 
 		SetupNLogTarget(filePath);
 
-		Console.WriteLine($"\nFilling {filePath} to {sizeMb} MB...");
+		Console.WriteLine($"\nFilling {filePath} to {sizeMb} MB using parallelism...");
 		var sw = Stopwatch.StartNew();
 
 		long bytesWritten = 0;
-		int lineNumber = 1;
-		string sampleLogLine = "This is a sample log line. Index: {0:D10} | Timestamp: {1:yyyy-MM-dd HH:mm:ss.fff} | Level: INFO | Message: Sample application log entry\n";
+		int numThreads = Environment.ProcessorCount;
+		int batchSize = 1000; // Nombre de lignes par écriture pour optimiser les perfs
 
-		while (bytesWritten < targetBytes)
+		Parallel.For(0, numThreads, (threadId, state) =>
 		{
-			string logEntry = string.Format(sampleLogLine, lineNumber, DateTime.Now);
-			byte[] bytes = Encoding.UTF8.GetBytes(logEntry);
-			bytesWritten += bytes.Length;
-            
-			Logger.Info($"Line {lineNumber}: Written {bytesWritten / (1024 * 1024.0):F2} MB");
-			lineNumber++;
+			StringBuilder sb = new StringBuilder();
+			int localLineNumber = threadId;
 
-			if (bytesWritten % (100 * 1024 * 1024) == 0)
+			while (Interlocked.Read(ref bytesWritten) < targetBytes && !state.IsStopped)
 			{
-				System.GC.Collect();
-			}
-		}
+				sb.Clear();
+				long localBytes = 0;
 
+				for (int i = 0; i < batchSize; i++)
+				{
+					string logEntry = $"This is a sample log line. Index: {localLineNumber:D10} | Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} | Level: INFO | Message: Sample application log entry";
+					sb.AppendLine(logEntry);
+					
+					// Estimation en octets (UTF-8 basique)
+					localBytes += logEntry.Length + Environment.NewLine.Length; 
+					localLineNumber += numThreads;
+				}
+
+				// TrimEnd évite que NLog ajoute un double saut de ligne à la fin du batch
+				Logger.Info(sb.ToString().TrimEnd('\r', '\n'));
+
+				Interlocked.Add(ref bytesWritten, localBytes);
+			}
+		});
+
+		// Force l'écriture sur le disque de la file d'attente asynchrone avant de stopper le chronomètre
+		LogManager.Flush();
 		sw.Stop();
+
 		Console.WriteLine($"\n✓ Completed in {sw.ElapsedMilliseconds} ms");
 		Console.WriteLine($"✓ File: {filePath}");
 		Console.WriteLine($"✓ Actual size: {new FileInfo(filePath).Length / (1024.0 * 1024.0):F2} MB");
@@ -161,12 +181,30 @@ class Program
 			FileName = filePath,
 			Layout = "${message}",
 			Encoding = Encoding.UTF8,
-			EnableFileDelete = false,
-			ArchiveAboveSize = -1,
+			
+			// Optimisations de performances
+			KeepFileOpen = true,
+			// La propriété ConcurrentWrites a été supprimée dans NLog 6.0.
+			// L'AsyncTargetWrapper ci-dessous suffit à éviter les blocages I/O.
+
+			// Configuration du Rolling (archivage au démarrage)
+			ArchiveOldFileOnStartup = true,
+			
+			// Nouvelle syntaxe d'archivage NLog 6.0+
+			ArchiveFileName = filePath + ".archive", 
+			ArchiveSuffixFormat = "_{0:0000}", // Remplace ArchiveNumberingMode.Sequence
+			MaxArchiveFiles = 10
 		};
 
-		config.AddTarget("file", fileTarget);
-		config.AddRule(LogLevel.Debug, LogLevel.Fatal, fileTarget);
+		// Async wrapper pour retirer les verrous I/O bloquants
+		var asyncTarget = new AsyncTargetWrapper(fileTarget)
+		{
+			QueueLimit = 20000,
+			OverflowAction = AsyncTargetWrapperOverflowAction.Block
+		};
+
+		config.AddTarget("file", asyncTarget);
+		config.AddRule(LogLevel.Debug, LogLevel.Fatal, asyncTarget);
 
 		LogManager.Configuration = config;
 	}

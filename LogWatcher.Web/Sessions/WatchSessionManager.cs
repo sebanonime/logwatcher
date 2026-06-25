@@ -183,7 +183,11 @@ namespace LogWatcher.Web.Sessions
                     _ = session.StartAsync(); // Restart tail from last known position
             }
         }
-
+        public WatchSession GetSession(string sessionId)
+        {
+            _sessions.TryGetValue(sessionId, out var session);
+            return session;
+        }
         private void RemoveSession(string sessionId)
         {
             if (_sessions.TryRemove(sessionId, out var session))

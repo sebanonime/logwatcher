@@ -129,18 +129,17 @@ namespace LogWatcher.Web.Sessions
                 {
                     try
                     {
-                        // On instancie le flux à la position courante
                         var tailStream = _provider.TailAsync(FilePath, currentTailOffset, ct);
+                        bool wasReset = false; // 👈 Le nouveau drapeau explicite
 
                         await foreach (var chunk in tailStream.WithCancellation(ct))
                         {
                             if (chunk.IsReset)
                             {
                                 await ExecuterResetFichierAvecRetryAsync(ct);
-                                
-                                // ✅ Le nouveau fichier est déjà indexé, on place le tail à la fin de celui-ci.
+                                // ✅ Reprise propre à la fin du fichier fraîchement indexé
                                 currentTailOffset = _index.TotalBytes; 
-                                
+                                wasReset = true;
                                 break; 
                             }
 
@@ -187,12 +186,9 @@ namespace LogWatcher.Web.Sessions
                                 new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
                         }
 
-                        // Si le foreach s'est terminé proprement (sans break et sans exception), on peut quitter le while
-                        // Cependant, un flux de Tail étant infini, si on sort ici sans annulation, c'est qu'il a pu se clore.
-                        // On vérifie si on a fait un break volontaire pour le rolling.
-                        if (currentTailOffset == 0 && !ct.IsCancellationRequested)
+                        // On utilise le drapeau booléen au lieu du test sur le 0
+                        if (wasReset && !ct.IsCancellationRequested)
                         {
-                            // On continue la boucle while pour re-tailer à 0
                             continue;
                         }
 
@@ -200,9 +196,11 @@ namespace LogWatcher.Web.Sessions
                     }
                     catch (Exception ex) when (ex is FileNotFoundException || ex is IOException)
                     {
-                        Console.WriteLine($"[WatchSession] Fichier temporairement inaccessible ({ex.Message}). Démarrage de la boucle de résilience...");
+                        Console.WriteLine($"[WatchSession] Fichier temporairement inaccessible ({ex.Message}). Résilience...");
                         await ExecuterResetFichierAvecRetryAsync(ct);
-                        currentTailOffset = _index.TotalBytes;
+                        
+                        // ✅ Même correction ici
+                        currentTailOffset = _index.TotalBytes; 
                     }
                 }
             }
@@ -296,7 +294,17 @@ namespace LogWatcher.Web.Sessions
             if (endOffset <= firstOffset)
                 return Array.Empty<LineDto>();
 
-            var block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
+            byte[] block;
+            try
+            {
+                block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
+            }
+            catch
+            {
+                // On intercepte l'erreur silencieusement et on renvoie un tableau vide
+                // au lieu de propager l'erreur et de faire redémarrer tout le tail !
+                return Array.Empty<LineDto>();
+            }
 
             var results = new List<LineDto>(actual);
             for (int i = 0; i < actual; i++)
@@ -310,7 +318,7 @@ namespace LogWatcher.Web.Sessions
 
                 int end = byteLen;
                 while (end > 0 && blockOffset + end - 1 < block.Length &&
-                       (block[blockOffset + end - 1] == '\n' || block[blockOffset + end - 1] == '\r'))
+                    (block[blockOffset + end - 1] == '\n' || block[blockOffset + end - 1] == '\r'))
                     end--;
 
                 results.Add(new LineDto { LineNumber = lineNum, Text = _encoding.GetString(block, blockOffset, end) });
@@ -732,7 +740,7 @@ namespace LogWatcher.Web.Sessions
                     await _logHub.Clients.Group(SessionId).SendAsync("OnNewLines", SessionId, dtos, _index.Count);
             }
         }
-        
+
         public async Task SendCurrentStatsAsync()
         {
             // On calcule le nombre de lignes visibles exactement comme tu le fais déjà ailleurs
