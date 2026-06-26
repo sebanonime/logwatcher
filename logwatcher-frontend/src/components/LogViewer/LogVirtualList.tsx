@@ -271,7 +271,10 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
 
   const handleGoToEnd = useCallback(async () => {
     updateTab(sessionId, { tailMode: true })
-    try { await hub.invoke('SetTail', sessionId, true) } catch {}
+    try { 
+      await hub.invoke('SetTail', sessionId, true) 
+      await hub.invoke('RequestFileStats', sessionId)
+    } catch {}
 
     if (totalLines > BUFFER_PAGE_SIZE) {
       setWindowStartIndex(totalLines - BUFFER_PAGE_SIZE)

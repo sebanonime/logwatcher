@@ -123,23 +123,21 @@ namespace LogWatcher.Web.Sessions
 
                 // 4. Follow and Tail new content avec cassure et recréation complète du flux sur Rolling
                 long currentTailOffset = _index.TotalBytes;
-                bool executionTerminee = false;
 
-                while (!executionTerminee && !ct.IsCancellationRequested)
+                // ✅ La boucle devient immortelle tant que la session n'est pas annulée
+                while (!ct.IsCancellationRequested)
                 {
                     try
                     {
                         var tailStream = _provider.TailAsync(FilePath, currentTailOffset, ct);
-                        bool wasReset = false; // 👈 Le nouveau drapeau explicite
 
                         await foreach (var chunk in tailStream.WithCancellation(ct))
                         {
                             if (chunk.IsReset)
                             {
                                 await ExecuterResetFichierAvecRetryAsync(ct);
-                                // ✅ Reprise propre à la fin du fichier fraîchement indexé
-                                currentTailOffset = _index.TotalBytes; 
-                                wasReset = true;
+                                currentTailOffset = _index.TotalBytes;
+                                // Le break casse le foreach, mais le while relancera le TailAsync au prochain tour
                                 break; 
                             }
 
@@ -152,6 +150,7 @@ namespace LogWatcher.Web.Sessions
                             int newCount = _index.Count - prevCount;
                             if (newCount <= 0) continue;
 
+                            // ⚠️ Attention ici : Les lignes ne sont envoyées que si _tailMode est à TRUE
                             if (_tailMode && !_filterEnabled)
                             {
                                 var newLines = await ReadLinesAsync(prevCount, newCount, ct);
@@ -186,20 +185,20 @@ namespace LogWatcher.Web.Sessions
                                 new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
                         }
 
-                        // On utilise le drapeau booléen au lieu du test sur le 0
-                        if (wasReset && !ct.IsCancellationRequested)
+                        // SI ON ARRIVE ICI : Le foreach s'est terminé sans erreur.
+                        // Cela veut dire que la connexion au fichier a "décroché" silencieusement.
+                        // Au lieu de s'arrêter, on patiente et on laisse le while() retenter une ouverture !
+                        if (!ct.IsCancellationRequested)
                         {
-                            continue;
+                            Console.WriteLine($"[WatchSession] Le flux Tail s'est fermé silencieusement. Relance dans 1s...");
+                            await Task.Delay(1000, ct);
                         }
-
-                        executionTerminee = true;
                     }
-                    catch (Exception ex) when (ex is FileNotFoundException || ex is IOException)
+                    // Retire le 'when' pour garantir qu'absolument AUCUNE erreur ne puisse tuer la session
+                    catch (Exception ex) 
                     {
-                        Console.WriteLine($"[WatchSession] Fichier temporairement inaccessible ({ex.Message}). Résilience...");
+                        Console.WriteLine($"[WatchSession] Erreur dans la boucle principale ({ex.Message}). Résilience...");
                         await ExecuterResetFichierAvecRetryAsync(ct);
-                        
-                        // ✅ Même correction ici
                         currentTailOffset = _index.TotalBytes; 
                     }
                 }
@@ -294,17 +293,53 @@ namespace LogWatcher.Web.Sessions
             if (endOffset <= firstOffset)
                 return Array.Empty<LineDto>();
 
-            byte[] block;
-            try
+            int expectedLength = (int)(endOffset - firstOffset);
+            byte[] block = null;
+            bool dataAcquired = false;
+            int retryCount = 0;
+
+            // 🛡️ BOUCLE ANTI-CACHE SMB : On insiste jusqu'à ce que Windows mette à jour la taille du fichier distant
+            while (retryCount < 10 && !ct.IsCancellationRequested)
             {
-                block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
+                try
+                {
+                    // Tentative 1 : Via le provider (SMB ou Local)
+                    block = await _provider.ReadRangeBytesAsync(FilePath, firstOffset, endOffset, ct);
+                    
+                    // Si on a obtenu la quantité d'octets attendue, le cache réseau est à jour !
+                    if (block != null && block.Length >= expectedLength)
+                    {
+                        dataAcquired = true;
+                        break;
+                    }
+
+                    // Tentative 2 : Si le provider a renvoyé 0 octet (Cache SMB qui ment sur l'EOF),
+                    // on force l'ouverture d'un nouveau FileStream pour obliger Windows à interroger le serveur.
+                    using var fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    if (fs.Length >= endOffset)
+                    {
+                        fs.Position = firstOffset;
+                        block = new byte[expectedLength];
+                        int read = await fs.ReadAsync(block, 0, expectedLength, ct);
+                        if (read >= expectedLength)
+                        {
+                            dataAcquired = true;
+                            break;
+                        }
+                    }
+                }
+                catch 
+                { 
+                    // On ignore silencieusement les erreurs d'accès réseau pour retenter
+                }
+
+                retryCount++;
+                await Task.Delay(250, ct); // Petite pause de 250ms avant de redemander au réseau
             }
-            catch
-            {
-                // On intercepte l'erreur silencieusement et on renvoie un tableau vide
-                // au lieu de propager l'erreur et de faire redémarrer tout le tail !
+
+            // Si après toutes les tentatives on a toujours rien, on retourne un tableau vide
+            if (!dataAcquired || block == null || block.Length == 0)
                 return Array.Empty<LineDto>();
-            }
 
             var results = new List<LineDto>(actual);
             for (int i = 0; i < actual; i++)
