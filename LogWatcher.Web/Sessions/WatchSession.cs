@@ -629,49 +629,76 @@ namespace LogWatcher.Web.Sessions
             return false;
         }
 
-        public async Task ApplyFilterAsync(FilterOptionsDto options, CancellationToken ct = default)
+        public Task ApplyFilterAsync(FilterOptionsDto options, CancellationToken ct = default)
         {
             _filterOptions = options;
             _filterEnabled = true;
             _isFilterBuilding = true;
-            try
+
+            // 1. Initialisation synchrone et rapide des règles (sur le thread principal de SignalR)
+            _activeHiddenLines = (options.HiddenLines ?? new())
+                .Where(hidden => hidden != null)
+                .Select(hidden => new HiddenLinePattern
+                {
+                    Text = hidden.Text,
+                    IsRegex = hidden.IsRegex,
+                    CaseSensitive = hidden.CaseSensitive,
+                    IsActive = hidden.IsActive,
+                })
+                .ToList();
+
+            // 2. Lancement de la tâche lourde en arrière-plan (Fire and Forget)
+            // Cela libère immédiatement la connexion SignalR pour que le front-end reprenne la main.
+            _ = Task.Run(async () =>
             {
-                _activeHiddenLines = (options.HiddenLines ?? new())
-                    .Where(hidden => hidden != null)
-                    .Select(hidden => new HiddenLinePattern
+                try
+                {
+                    var progress = _logHub.Clients.Group(SessionId);
+                    FilteredLineIndex newFilter;
+
+                    var agentLines = await _provider.BuildFilterAsync(options, SessionId, ct);
+                    if (agentLines != null)
                     {
-                        Text = hidden.Text,
-                        IsRegex = hidden.IsRegex,
-                        CaseSensitive = hidden.CaseSensitive,
-                        IsActive = hidden.IsActive,
-                    })
-                    .ToList();
+                        newFilter = new FilteredLineIndex();
+                        foreach (var ln in agentLines)
+                            newFilter.Add(ln);
+                    }
+                    else
+                    {
+                        // ⚠️ C'est cet appel qui prenait trop de temps et bloquait tout en réseau (SMB) !
+                        newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
+                    }
 
-                var progress = _logHub.Clients.Group(SessionId);
-                FilteredLineIndex newFilter;
-
-                var agentLines = await _provider.BuildFilterAsync(options, SessionId, ct);
-                if (agentLines != null)
-                {
-                    newFilter = new FilteredLineIndex();
-                    foreach (var ln in agentLines)
-                        newFilter.Add(ln);
+                    Volatile.Write(ref _filter, newFilter);
+                    Interlocked.Increment(ref _viewVersion);
+                    
+                    // 3. Le traitement est terminé, on notifie le front-end avec les stats mises à jour
+                    await progress.SendAsync("OnFileStats", SessionId,
+                        new FileStatsDto { 
+                            TotalLines = newFilter.Count, 
+                            SizeBytes = _index.TotalBytes, 
+                            IsIndexed = true, 
+                            ServerId = ServerId, 
+                            FilePath = FilePath, 
+                            ViewVersion = ViewVersion 
+                        },
+                        cancellationToken: ct);
                 }
-                else
+                catch (Exception ex)
                 {
-                    newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
+                    // Optionnel : Notifier le frontend en cas de plantage réseau en plein milieu
+                    Console.WriteLine($"[WatchSession] Erreur asynchrone lors du filtrage : {ex.Message}");
+                    await _logHub.Clients.Group(SessionId).SendAsync("OnError", SessionId, $"Le filtrage a échoué : {ex.Message}", cancellationToken: ct);
                 }
+                finally
+                {
+                    _isFilterBuilding = false;
+                }
+            }, ct);
 
-                Volatile.Write(ref _filter, newFilter);
-                Interlocked.Increment(ref _viewVersion);
-                await progress.SendAsync("OnFileStats", SessionId,
-                    new FileStatsDto { TotalLines = newFilter.Count, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion },
-                    cancellationToken: ct);
-            }
-            finally
-            {
-                _isFilterBuilding = false;
-            }
+            // On retourne instantanément une tâche terminée. 
+            // React va recevoir la réponse du "hub.invoke('SetFilter', ...)" immédiatement.
+            return Task.CompletedTask;
         }
 
         public async Task ClearFilterAsync()

@@ -46,7 +46,29 @@
             "Username": ""
           }
         ]
-      }
+      },	  
+      {
+          "Name": "NASEB",
+          "EnvironmentColor": null,
+          "Servers": [
+            {
+              "Id": "local1",
+              "Name": "Local 1",
+              "Type": "smb",
+              "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog1",
+              "AgentId": null,
+              "Username": null
+            },
+            {
+              "Id": "local",
+              "Name": "Local 2",
+              "Type": "smb",
+              "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog2",
+              "AgentId": null,
+              "Username": null
+            }
+          ]
+        }
     ]
   }
 ]

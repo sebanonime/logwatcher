@@ -195,6 +195,12 @@ export function MainToolbar({
         filterCaseSensitive: selectedFilter.caseSensitive,
       })
       onFilterApplied?.()
+    } catch (error) {
+      console.error("Error or Timeout while applying filter:", error)
+      // Optionally: Display the error in the UI via tab.errorMessage
+      updateTab(activeSessionId, { 
+        errorMessage: "Filter take too much time (Samba slow). Please try again." 
+      })
     } finally {
       setIsFiltering(false)
       setFilterInProgress(activeSessionId, false)
