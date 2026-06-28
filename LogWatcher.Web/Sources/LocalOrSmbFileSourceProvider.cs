@@ -150,10 +150,18 @@ namespace LogWatcher.Web.Sources
             return Task.FromResult(files);
         }
 
-        private FileStream OpenReadStream(string path) =>
-            new FileStream(path, FileMode.Open, FileAccess.Read,
+        private FileStream OpenReadStream(string path)
+        {
+            // L'ajout de FileOptions.SequentialScan indique au cache de l'OS 
+            // que nous allons lire le fichier du début à la fin (parfait pour le filtrage).
+            return new FileStream(
+                path, 
+                FileMode.Open, 
+                FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete,
-                BufferSize, useAsync: true);
+                BufferSize, // Reste à 1 Mo, c'est très bien pour SMB
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+        }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

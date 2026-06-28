@@ -162,6 +162,7 @@ export interface LogTab {
   activeStoredFilterName?: string
   errorMessage?: string
   environmentColor?: string
+  isFiltering?: boolean
 }
 
 export type UserFontFamily = 'Cascadia Code' | 'Consolas' | 'Segoe UI' | 'Bahnschrift'

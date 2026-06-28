@@ -104,7 +104,8 @@ export function MainToolbar({
       setIsFiltering(true)
       setFilterInProgress(activeSessionId, true)
       clearBuffer(activeSessionId)
-      updateTab(activeSessionId, { totalLines: 0 })
+      // 👇 Modification A : On active l'indicateur visuel
+      updateTab(activeSessionId, { totalLines: 0, isFiltering: true })
       try {
         addEntry(nextPattern)
         await hub.invoke('SetFilter', activeSessionId, filter)
@@ -183,6 +184,8 @@ export function MainToolbar({
 
     setIsFiltering(true)
     setFilterInProgress(activeSessionId, true)
+    // 👇 Modification B : On active l'indicateur visuel
+    updateTab(activeSessionId, { isFiltering: true })
     try {
       await hub.invoke('SetFilter', activeSessionId, filter)
       // The server will respond via OnFileStats with the filtered line count.
@@ -251,7 +254,8 @@ export function MainToolbar({
 
     // Freeze viewport while backend builds filtered index to avoid stale requests.
     clearBuffer(activeSessionId)
-    updateTab(activeSessionId, { totalLines: 0 })
+    // 👇 Modification C : On vide l'affichage et on active l'indicateur visuel
+    updateTab(activeSessionId, { totalLines: 0, isFiltering: true })
     await hub.invoke('SetFilter', activeSessionId, filter)
     // The server will respond via OnFileStats with the filtered line count.
     // Do NOT clear the buffer here — the OnFileStats handler will update

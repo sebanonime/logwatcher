@@ -1,3 +1,5 @@
+// uploaded:LogViewer.tsx
+
 import React from 'react'
 import type { HubConnection } from '@microsoft/signalr'
 import { LogVirtualList } from './LogVirtualList'
@@ -22,6 +24,8 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
   const indexProgress = isIndexing && tab?.indexTotalBytes
     ? Math.min(100, Math.round(((tab?.indexedBytes ?? 0) / tab.indexTotalBytes) * 100))
     : null
+  
+  // ÉTAPE C : On récupère l'état de filtrage depuis le store
   const { filtersInProgress } = useTabStore()
 
   return (
@@ -33,6 +37,7 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
         <div className="index-progress-bar index-progress-bar--indeterminate" />
       )}
 
+      {/* ÉTAPE C : Affichage de l'indicateur visuel de filtrage */}
       {filtersInProgress[sessionId] && (
         <div className="filter-progress-bar">
           <div className="filter-progress-bar__fill" />
@@ -55,6 +60,8 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
                 filterIsRegex: undefined,
                 filterCaseSensitive: undefined,
                 activeStoredFilterName: undefined,
+                // On s'assure de couper l'indicateur si on annule
+                isFiltering: false,
               })
               await hub.invoke('ClearFilter', sessionId)
               // Also clear the filter pattern in the toolbar for the active tab

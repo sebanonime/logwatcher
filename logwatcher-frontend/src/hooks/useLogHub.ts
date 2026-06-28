@@ -1,3 +1,5 @@
+// uploaded:useLogHub.ts
+
 import { useEffect, useRef } from 'react'
 import { getLogHub, startLogHub } from '../signalr/logHubConnection'
 import { useLogStore, useTabStore } from '../store/logStore'
@@ -62,6 +64,8 @@ export function useLogHub() {
         sizeBytes: stats.sizeBytes,
         isIndexed: stats.isIndexed,
         viewVersion: stats.viewVersion,
+        // ÉTAPE B : Le filtrage est terminé, on désactive l'indicateur
+        isFiltering: false,
       })
     })
 
@@ -80,7 +84,8 @@ export function useLogHub() {
 
     hub.on('OnError', (sessionId: string, message: string) => {
       console.error(`[LogHub] session=${sessionId}:`, message)
-      updateTab(sessionId, { errorMessage: message })
+      // ÉTAPE B : En cas d'erreur aussi, on stoppe l'indicateur
+      updateTab(sessionId, { errorMessage: message, isFiltering: false })
     })
 
     // On reconnect, re-join all active session groups so the client

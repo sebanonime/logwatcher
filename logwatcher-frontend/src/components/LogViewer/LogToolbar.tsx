@@ -30,6 +30,8 @@ export function LogToolbar({ sessionId, hub }: LogToolbarProps) {
     }
     setIsFiltering(true)
     const filter: FilterOptionsDto = { pattern: pattern.trim(), isRegex, caseSensitive }
+    // 👇 Modification D : On vide l'affichage et on active l'indicateur visuel
+    updateTab(sessionId, { totalLines: 0, isFiltering: true })
     await hub.invoke('SetFilter', sessionId, filter)
     updateTab(sessionId, { isFiltered: true })
     setIsFiltering(false)

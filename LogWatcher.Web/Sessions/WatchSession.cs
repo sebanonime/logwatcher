@@ -433,25 +433,28 @@ namespace LogWatcher.Web.Sessions
             };
         }
 
-        private async Task<FilteredLineIndex> BuildFilterFromStreamAsync(
-            FilterOptionsDto options, CancellationToken ct, bool reportProgress)
+        private async Task<FilteredLineIndex> BuildFilterFromStreamAsync(FilterOptionsDto options, CancellationToken ct, bool reportProgress)
         {
             var filter = new FilteredLineIndex();
             var hiddenRules = CompileHiddenPatterns((options.HiddenLines ?? new())
                 .Where(h => h != null)
                 .ToList());
 
+            // Levier 3 : Compilation de la Regex UNE SEULE FOIS avant la boucle
             Regex patternRegex = null;
             var pattern = options.Pattern ?? string.Empty;
-            if (options.IsRegex)
+            if (options.IsRegex && !string.IsNullOrEmpty(pattern))
             {
                 var ropts = options.CaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                // L'option Compiled accélère drastiquement l'exécution dans une boucle
                 patternRegex = new Regex(pattern, ropts | RegexOptions.Compiled);
             }
 
             int total = _index.Count;
             var progress = _logHub.Clients.Group(SessionId);
-            int nextProgressLine = 50_000;
+            
+            // Levier 1 : Throttling temporel plutôt que basé sur un nombre de lignes fixe
+            var lastReportTime = DateTime.UtcNow;
 
             var rawStream = _provider.ReadRawAsync(FilePath, 0, ct);
             int lineNumber = 0;
@@ -460,7 +463,7 @@ namespace LogWatcher.Web.Sessions
 
             await foreach (var chunk in rawStream.WithCancellation(ct))
             {
-                var bytes = chunk.ToArray(); 
+                var bytes = chunk.ToArray();
                 for (int i = 0; i < bytes.Length; i++)
                 {
                     byte b = bytes[i];
@@ -470,21 +473,35 @@ namespace LogWatcher.Web.Sessions
                         if (end > 0 && lineBytes[end - 1] == (byte)'\r') end--;
 
                         var text = _encoding.GetString(lineBytes, 0, end);
-                        bool matchesPattern = options.IsRegex
-                            ? patternRegex?.IsMatch(text) == true
-                            : options.CaseSensitive
+                        
+                        // Utilisation de la Regex compilée
+                        bool matchesPattern = false;
+                        if (string.IsNullOrEmpty(pattern))
+                        {
+                            matchesPattern = true; // Pas de pattern principal, on filtre juste les lignes cachées
+                        }
+                        else if (options.IsRegex && patternRegex != null)
+                        {
+                            matchesPattern = patternRegex.IsMatch(text);
+                        }
+                        else
+                        {
+                            matchesPattern = options.CaseSensitive
                                 ? text.Contains(pattern)
                                 : text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+                        }
 
                         if (matchesPattern && !IsHiddenByCompiledRules(text, hiddenRules))
                             filter.Add(lineNumber);
 
                         lineNumber++;
-                        if (reportProgress && lineNumber >= nextProgressLine)
+                        
+                        // Levier 1 : Envoi de progression maximum une fois toutes les 300ms
+                        if (reportProgress && (DateTime.UtcNow - lastReportTime).TotalMilliseconds > 300)
                         {
+                            lastReportTime = DateTime.UtcNow;
                             await progress.SendAsync("OnFilterProgress", SessionId,
                                 Math.Min(lineNumber, total), total, cancellationToken: ct);
-                            nextProgressLine += 50_000;
                         }
 
                         lineBytesLen = 0;
@@ -498,16 +515,29 @@ namespace LogWatcher.Web.Sessions
                 }
             }
 
+            // Traitement de la dernière ligne si le fichier ne finit pas par un saut de ligne
             if (lineBytesLen > 0)
             {
                 int end = lineBytesLen;
                 if (end > 0 && lineBytes[end - 1] == (byte)'\r') end--;
                 var text = _encoding.GetString(lineBytes, 0, end);
-                bool matchesPattern = options.IsRegex
-                    ? patternRegex?.IsMatch(text) == true
-                    : options.CaseSensitive
+                
+                bool matchesPattern = false;
+                if (string.IsNullOrEmpty(pattern))
+                {
+                    matchesPattern = true;
+                }
+                else if (options.IsRegex && patternRegex != null)
+                {
+                    matchesPattern = patternRegex.IsMatch(text);
+                }
+                else
+                {
+                    matchesPattern = options.CaseSensitive
                         ? text.Contains(pattern)
                         : text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+                }
+
                 if (matchesPattern && !IsHiddenByCompiledRules(text, hiddenRules))
                     filter.Add(lineNumber);
             }
@@ -519,7 +549,6 @@ namespace LogWatcher.Web.Sessions
 
             return filter;
         }
-
         private Task<FilteredLineIndex> BuildHiddenFilterFromStreamAsync(
             List<HiddenLinePattern> hiddenLines, CancellationToken ct)
             => BuildFilterFromStreamAsync(new FilterOptionsDto
