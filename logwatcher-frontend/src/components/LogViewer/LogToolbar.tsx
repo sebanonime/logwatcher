@@ -36,9 +36,13 @@ export function LogToolbar({ sessionId, hub }: LogToolbarProps) {
     try {
       await hub.invoke('SetFilter', sessionId, filter)
       updateTab(sessionId, { isFiltered: true })
+    } catch {
+      // On invocation error clear the bar immediately (OnFileStats will never arrive)
+      setFilterInProgress(sessionId, false)
     } finally {
       setIsFiltering(false)
-      setFilterInProgress(sessionId, false)
+      // NOTE: setFilterInProgress(false) is intentionally NOT called here.
+      // The progress bar stays alive until OnFileStats (or OnError) fires.
     }
   }, [hub, sessionId, pattern, isRegex, caseSensitive, updateTab, setFilterInProgress])
 

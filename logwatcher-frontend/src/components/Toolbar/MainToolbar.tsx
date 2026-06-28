@@ -110,9 +110,17 @@ export function MainToolbar({
           filterCaseSensitive: false,
         })
         onFilterApplied?.()
+      } catch {
+        // On error the hub's OnError handler will clear filtersInProgress.
+        // Still unblock the button immediately on exceptions.
+        setFilterInProgress(activeSessionId, false)
       } finally {
         setIsFiltering(false)
-        setFilterInProgress(activeSessionId, false)
+        // NOTE: setFilterInProgress(false) is intentionally NOT called here.
+        // hub.invoke('SetFilter') resolves as soon as the server ACCEPTS the command,
+        // but the actual filtering is asynchronous. The progress bar must remain
+        // visible until OnFileStats (or OnError) arrives — those handlers call
+        // setFilterInProgress(false) at the real completion point.
       }
     }
 
@@ -188,9 +196,14 @@ export function MainToolbar({
       updateTab(activeSessionId, { 
         errorMessage: "Filter take too much time (Samba slow). Please try again." 
       })
+      // On invocation error clear the bar immediately (OnFileStats will never arrive)
+      setFilterInProgress(activeSessionId, false)
     } finally {
       setIsFiltering(false)
-      setFilterInProgress(activeSessionId, false)
+      // NOTE: setFilterInProgress(false) is intentionally NOT called here.
+      // The progress bar stays alive until OnFileStats (or OnError) fires,
+      // because hub.invoke resolves as soon as the server accepts the call,
+      // not when it finishes scanning the file.
     }
   }, [hub, activeSessionId, activeProfile, clearBuffer, updateTab, onFilterApplied, setFilterInProgress])
 
@@ -249,9 +262,13 @@ export function MainToolbar({
         filterCaseSensitive: filterPayload.caseSensitive,
       })
       onFilterApplied?.()
+    } catch {
+      // On invocation error clear the bar immediately (OnFileStats will never arrive)
+      setFilterInProgress(activeSessionId, false)
     } finally {
       setIsFiltering(false)
-      setFilterInProgress(activeSessionId, false)
+      // NOTE: setFilterInProgress(false) is intentionally NOT called here.
+      // The progress bar stays alive until OnFileStats (or OnError) fires.
     }
   }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer, setFilterInProgress])
 

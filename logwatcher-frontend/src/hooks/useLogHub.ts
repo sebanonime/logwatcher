@@ -64,9 +64,13 @@ export function useLogHub() {
         sizeBytes: stats.sizeBytes,
         isIndexed: stats.isIndexed,
         viewVersion: stats.viewVersion,
-        // ÉTAPE B : Le filtrage est terminé, on désactive l'indicateur
+        // Le filtrage est terminé, on désactive l'indicateur sur le tab
         isFiltering: false,
       })
+      // FIX: clear the dedicated filtersInProgress flag so LogViewer hides the progress bar.
+      // hub.invoke('SetFilter') returns immediately when the server accepts the command,
+      // but actual filtering happens asynchronously. OnFileStats is the real signal of completion.
+      useTabStore.getState().setFilterInProgress(sessionId, false)
     })
 
     hub.on('OnReload', (sessionId: string) => {
@@ -84,8 +88,9 @@ export function useLogHub() {
 
     hub.on('OnError', (sessionId: string, message: string) => {
       console.error(`[LogHub] session=${sessionId}:`, message)
-      // ÉTAPE B : En cas d'erreur aussi, on stoppe l'indicateur
+      // En cas d'erreur aussi, on stoppe l'indicateur sur le tab ET dans filtersInProgress
       updateTab(sessionId, { errorMessage: message, isFiltering: false })
+      useTabStore.getState().setFilterInProgress(sessionId, false)
     })
 
     // On reconnect, re-join all active session groups so the client
