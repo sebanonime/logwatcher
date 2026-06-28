@@ -19,9 +19,6 @@ interface MainToolbarProps {
   onPendingApplyRequestConsumed?: () => void
 }
 
-/**
- * Top toolbar: profile + filter controls for the active log tab + tail toggle.
- */
 export function MainToolbar({
   hub,
   onOpenPreferences,
@@ -59,7 +56,6 @@ export function MainToolbar({
   const targetLineRef = useRef<HTMLDivElement>(null)
   const buildId = __APP_BUILD__
 
-  // Reset filter state when active tab changes
   useEffect(() => {
     setPattern('')
     setIsFiltering(false)
@@ -71,7 +67,6 @@ export function MainToolbar({
     }
   }, [activeStoredFilter])
 
-  // Consume pattern injected from filter history panel
   useEffect(() => {
     if (pendingPattern) {
       setPattern(pendingPattern)
@@ -104,14 +99,10 @@ export function MainToolbar({
       setIsFiltering(true)
       setFilterInProgress(activeSessionId, true)
       clearBuffer(activeSessionId)
-      // 👇 Modification A : On active l'indicateur visuel
-      updateTab(activeSessionId, { totalLines: 0, isFiltering: true })
+      updateTab(activeSessionId, { totalLines: 0 })
       try {
         addEntry(nextPattern)
         await hub.invoke('SetFilter', activeSessionId, filter)
-        // The server will respond via OnFileStats with the filtered line count.
-        // Do NOT clear the buffer here — the OnFileStats handler will update
-        // totalLines and clear stale data via viewVersion mismatch detection.
         updateTab(activeSessionId, {
           isFiltered: true,
           filterPattern: nextPattern,
@@ -138,7 +129,6 @@ export function MainToolbar({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [contextModal])
 
-  // Auto-scroll the target line to the center of the context modal
   useLayoutEffect(() => {
     if (!contextModal || !targetLineRef.current || !contextBodyRef.current) return
     const targetEl = targetLineRef.current
@@ -184,13 +174,8 @@ export function MainToolbar({
 
     setIsFiltering(true)
     setFilterInProgress(activeSessionId, true)
-    // 👇 Modification B : On active l'indicateur visuel
-    updateTab(activeSessionId, { isFiltering: true })
     try {
       await hub.invoke('SetFilter', activeSessionId, filter)
-      // The server will respond via OnFileStats with the filtered line count.
-      // Do NOT clear the buffer here — the OnFileStats handler will update
-      // totalLines and clear stale data via viewVersion mismatch detection.
       updateTab(activeSessionId, {
         isFiltered: true,
         filterPattern: selectedFilter.filter,
@@ -200,7 +185,6 @@ export function MainToolbar({
       onFilterApplied?.()
     } catch (error) {
       console.error("Error or Timeout while applying filter:", error)
-      // Optionally: Display the error in the UI via tab.errorMessage
       updateTab(activeSessionId, { 
         errorMessage: "Filter take too much time (Samba slow). Please try again." 
       })
@@ -242,6 +226,7 @@ export function MainToolbar({
     setIsFiltering(true)
     setFilterInProgress(activeSessionId, true)
     addEntry(filterPayload.pattern.trim())
+    
     const filter: FilterOptionsDto = {
       ...filterPayload,
       hiddenLines: (activeProfile?.dicoHiddenLog ?? []).map(h => ({
@@ -252,24 +237,22 @@ export function MainToolbar({
       })),
     }
 
-    // Freeze viewport while backend builds filtered index to avoid stale requests.
     clearBuffer(activeSessionId)
-    // 👇 Modification C : On vide l'affichage et on active l'indicateur visuel
-    updateTab(activeSessionId, { totalLines: 0, isFiltering: true })
-    await hub.invoke('SetFilter', activeSessionId, filter)
-    // The server will respond via OnFileStats with the filtered line count.
-    // Do NOT clear the buffer here — the OnFileStats handler will update
-    // totalLines and clear stale data via viewVersion mismatch detection.
-
-    updateTab(activeSessionId, {
-      isFiltered: true,
-      filterPattern: filterPayload.pattern,
-      filterIsRegex: filterPayload.isRegex,
-      filterCaseSensitive: filterPayload.caseSensitive,
-    })
-    setIsFiltering(false)
-    setFilterInProgress(activeSessionId, false)
-    onFilterApplied?.()
+    updateTab(activeSessionId, { totalLines: 0 })
+    
+    try {
+      await hub.invoke('SetFilter', activeSessionId, filter)
+      updateTab(activeSessionId, {
+        isFiltered: true,
+        filterPattern: filterPayload.pattern,
+        filterIsRegex: filterPayload.isRegex,
+        filterCaseSensitive: filterPayload.caseSensitive,
+      })
+      onFilterApplied?.()
+    } finally {
+      setIsFiltering(false)
+      setFilterInProgress(activeSessionId, false)
+    }
   }, [hub, activeSessionId, pattern, updateTab, addEntry, onFilterApplied, activeStoredFilter, activeProfile, clearBuffer, setFilterInProgress])
 
   const clearFilter = useCallback(async () => {

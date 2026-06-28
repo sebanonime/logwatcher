@@ -8,16 +8,13 @@ interface LogToolbarProps {
   hub: HubConnection
 }
 
-/**
- * Filter bar + tail toggle for a single log session.
- */
 export function LogToolbar({ sessionId, hub }: LogToolbarProps) {
   const [pattern, setPattern] = useState('')
   const [isRegex, setIsRegex] = useState(false)
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [isFiltering, setIsFiltering] = useState(false)
 
-  const { tabs, updateTab } = useTabStore()
+  const { tabs, updateTab, setFilterInProgress } = useTabStore()
   const tab = tabs.find(t => t.sessionId === sessionId)
   const tailMode = tab?.tailMode ?? true
 
@@ -26,16 +23,24 @@ export function LogToolbar({ sessionId, hub }: LogToolbarProps) {
       await hub.invoke('ClearFilter', sessionId)
       updateTab(sessionId, { isFiltered: false })
       setIsFiltering(false)
+      setFilterInProgress(sessionId, false)
       return
     }
+    
     setIsFiltering(true)
+    setFilterInProgress(sessionId, true)
     const filter: FilterOptionsDto = { pattern: pattern.trim(), isRegex, caseSensitive }
-    // 👇 Modification D : On vide l'affichage et on active l'indicateur visuel
-    updateTab(sessionId, { totalLines: 0, isFiltering: true })
-    await hub.invoke('SetFilter', sessionId, filter)
-    updateTab(sessionId, { isFiltered: true })
-    setIsFiltering(false)
-  }, [hub, sessionId, pattern, isRegex, caseSensitive, updateTab])
+    
+    updateTab(sessionId, { totalLines: 0 })
+    
+    try {
+      await hub.invoke('SetFilter', sessionId, filter)
+      updateTab(sessionId, { isFiltered: true })
+    } finally {
+      setIsFiltering(false)
+      setFilterInProgress(sessionId, false)
+    }
+  }, [hub, sessionId, pattern, isRegex, caseSensitive, updateTab, setFilterInProgress])
 
   const clearFilter = useCallback(async () => {
     setPattern('')
