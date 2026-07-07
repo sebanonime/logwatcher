@@ -66,6 +66,7 @@ export function useLogHub() {
         viewVersion: stats.viewVersion,
         // Le filtrage est terminé, on désactive l'indicateur sur le tab
         isFiltering: false,
+        filterProgress: undefined,
       })
       // FIX: clear the dedicated filtersInProgress flag so LogViewer hides the progress bar.
       // hub.invoke('SetFilter') returns immediately when the server accepts the command,
@@ -75,21 +76,36 @@ export function useLogHub() {
 
     hub.on('OnReload', (sessionId: string) => {
       clearBuffer(sessionId)
-      updateTab(sessionId, { totalLines: 0, isIndexed: false, newLinesCount: 0 })
+      updateTab(sessionId, {
+        totalLines: 0,
+        isIndexed: false,
+        newLinesCount: 0,
+        // Clear the stale viewVersion so subsequent OnLines responses with the new version
+        // are not rejected by the version-mismatch guard in the OnLines handler.
+        viewVersion: undefined,
+        // Exit context mode — the context window belongs to the old file content.
+        contextStartLine: undefined,
+        contextTotalLines: undefined,
+        // Clear any in-progress filter state from the previous file.
+        isFiltering: false,
+        filterProgress: undefined,
+      })
     })
 
     hub.on('OnIndexProgress', (sessionId: string, bytesIndexed: number, totalBytes: number) => {
       updateTab(sessionId, { indexedBytes: bytesIndexed, indexTotalBytes: totalBytes })
     })
 
-    hub.on('OnFilterProgress', (_sessionId: string, _processed: number, _total: number) => {
-      // Future: show filter progress indicator
+    hub.on('OnFilterProgress', (sessionId: string, processed: number, total: number) => {
+      updateTab(sessionId, {
+        filterProgress: total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : undefined,
+      })
     })
 
     hub.on('OnError', (sessionId: string, message: string) => {
       console.error(`[LogHub] session=${sessionId}:`, message)
       // En cas d'erreur aussi, on stoppe l'indicateur sur le tab ET dans filtersInProgress
-      updateTab(sessionId, { errorMessage: message, isFiltering: false })
+      updateTab(sessionId, { errorMessage: message, isFiltering: false, filterProgress: undefined })
       useTabStore.getState().setFilterInProgress(sessionId, false)
     })
 

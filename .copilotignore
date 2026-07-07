@@ -1,0 +1,44 @@
+# Fichier de configuration pour .gitignore ou .copilotignore
+# Ce fichier aide à réduire la consommation de tokens en empêchant 
+# GitHub Copilot d'indexer les fichiers inutiles.
+
+# Dossiers de dépendances et de build
+node_modules/
+bin/
+obj/
+dist/
+build/
+publish/
+.vs/
+.vscode/
+.idea/
+
+# Fichiers de configuration système ou IDE
+.DS_Store
+*.swp
+*.swo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Fichiers de logs et temporaires
+*.log
+*.tmp
+*.bak
+coverage/
+
+# Fichiers générés par .NET
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+
+# Fichiers de cache de package
+packages/
+*.nupkg
+
+# Fichiers de lock (souvent trop volumineux pour Copilot)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

@@ -31,6 +31,7 @@ namespace LogWatcher.Web.Sessions
         private volatile bool _isIndexComplete;
         private Encoding _encoding;
         private CancellationTokenSource _cts = new();
+        private CancellationTokenSource _filterCts;
         private bool _tailMode = true;
         private FilterOptionsDto _filterOptions;
 
@@ -180,9 +181,16 @@ namespace LogWatcher.Web.Sessions
                                 }
                             }
 
-                            int visibleForStats = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
-                            await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
-                                new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+                            // Don't send OnFileStats while a filter is being built: the filter count
+                            // is not yet ready and the frontend would show an incorrect totalLines value
+                            // (either the full unfiltered count or an old filter count), causing empty
+                            // rows to appear and confusing the virtual-list window position.
+                            if (!_isFilterBuilding)
+                            {
+                                int visibleForStats = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+                                await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                                    new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+                            }
                         }
 
                         // SI ON ARRIVE ICI : Le foreach s'est terminé sans erreur.
@@ -660,6 +668,16 @@ namespace LogWatcher.Web.Sessions
 
         public Task ApplyFilterAsync(FilterOptionsDto options, CancellationToken ct = default)
         {
+            // Cancel any in-flight filter task before starting a new one.
+            // On slow SMB shares the previous task can be blocked inside FileStream.ReadAsync;
+            // without cancellation it runs forever and its finally{_isFilterBuilding=false} would
+            // fire at an unpredictable time, unblocking ReadFilteredLinesAsync with stale data.
+            var prevCts = _filterCts;
+            _filterCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            prevCts?.Cancel();
+            prevCts?.Dispose();
+            var filterCt = _filterCts.Token;
+
             _filterOptions = options;
             _filterEnabled = true;
             _isFilterBuilding = true;
@@ -685,7 +703,7 @@ namespace LogWatcher.Web.Sessions
                     var progress = _logHub.Clients.Group(SessionId);
                     FilteredLineIndex newFilter;
 
-                    var agentLines = await _provider.BuildFilterAsync(options, SessionId, ct);
+                    var agentLines = await _provider.BuildFilterAsync(options, SessionId, filterCt);
                     if (agentLines != null)
                     {
                         newFilter = new FilteredLineIndex();
@@ -695,7 +713,7 @@ namespace LogWatcher.Web.Sessions
                     else
                     {
                         // ⚠️ C'est cet appel qui prenait trop de temps et bloquait tout en réseau (SMB) !
-                        newFilter = await BuildFilterFromStreamAsync(options, ct, reportProgress: true);
+                        newFilter = await BuildFilterFromStreamAsync(options, filterCt, reportProgress: true);
                     }
 
                     Volatile.Write(ref _filter, newFilter);
@@ -711,19 +729,23 @@ namespace LogWatcher.Web.Sessions
                             FilePath = FilePath, 
                             ViewVersion = ViewVersion 
                         },
-                        cancellationToken: ct);
+                        cancellationToken: filterCt);
+                }
+                catch (OperationCanceledException)
+                {
+                    // A newer ApplyFilterAsync call cancelled this task — silently discard.
                 }
                 catch (Exception ex)
                 {
                     // Optionnel : Notifier le frontend en cas de plantage réseau en plein milieu
                     Console.WriteLine($"[WatchSession] Erreur asynchrone lors du filtrage : {ex.Message}");
-                    await _logHub.Clients.Group(SessionId).SendAsync("OnError", SessionId, $"Le filtrage a échoué : {ex.Message}", cancellationToken: ct);
+                    await _logHub.Clients.Group(SessionId).SendAsync("OnError", SessionId, $"Le filtrage a échoué : {ex.Message}", cancellationToken: _cts.Token);
                 }
                 finally
                 {
                     _isFilterBuilding = false;
                 }
-            }, ct);
+            }, filterCt);
 
             // On retourne instantanément une tâche terminée. 
             // React va recevoir la réponse du "hub.invoke('SetFilter', ...)" immédiatement.
@@ -786,14 +808,35 @@ namespace LogWatcher.Web.Sessions
         {
             if (isReset)
             {
+                // Mirror the SMB reset path (ExecuterResetFichierAvecRetryAsync):
+                // clear state, bump the view version so the frontend accepts new versioned messages,
+                // then send both OnReload (clear buffer) and OnFileStats (new version + 0 lines)
+                // so the frontend never gets stuck with a stale viewVersion.
                 _index.Clear();
-                await _logHub.Clients.Group(SessionId).SendAsync("OnReload", SessionId);
+                Volatile.Write(ref _filter, null);
+                Interlocked.Increment(ref _viewVersion);
+                _isIndexComplete = true;
+
+                await SendToGroupAndOpeningClientAsync("OnReload", SessionId);
+                await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
+                    new FileStatsDto
+                    {
+                        TotalLines = 0,
+                        SizeBytes = 0,
+                        IsIndexed = true,
+                        ServerId = ServerId,
+                        FilePath = FilePath,
+                        ViewVersion = ViewVersion
+                    });
                 return;
             }
             foreach (var (line, offset) in lines.Zip(offsets))
             {
                 _index.AddOffset(offset);
-                _index.TotalBytes = offset + _encoding.GetByteCount(line) + 1;
+                // Use +2 to cover both \n (1 byte) and \r\n (2 bytes) line endings.
+                // This is a conservative upper-bound for the last line's byte length;
+                // per-line offsets (from the agent's fixed ReadNewLines) are exact.
+                _index.TotalBytes = offset + _encoding.GetByteCount(line) + 2;
             }
 
             if (!_tailMode) return;

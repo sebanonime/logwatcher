@@ -135,26 +135,66 @@ public class AgentFileWatcher : IDisposable
             using var fs = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             fs.Seek(_position, SeekOrigin.Begin);
 
-            using var reader = new StreamReader(fs, _encoding, detectEncodingFromByteOrderMarks: true, bufferSize: 65536, leaveOpen: true);
+            long available = fs.Length - fs.Position;
+            if (available <= 0) return (lines.ToArray(), offsets.ToArray());
 
-            string? line;
-            while ((line = reader.ReadLine()) != null)
+            byte[] buffer = new byte[available];
+            int bytesRead = 0;
+            while (bytesRead < buffer.Length)
             {
-                long offset = _position;
-                offsets.Add(offset);
-                lines.Add(line);
-
-                // Advance position by byte length of line + newline
-                _position += _encoding.GetByteCount(line) + 1; // +1 for \n
-                // Note: on Windows files with \r\n, this may be slightly off — handled by seeking on next read
-
-                _lineIndex.AddLine(_sessionId, _filePath, offset);
+                int n = fs.Read(buffer, bytesRead, buffer.Length - bytesRead);
+                if (n == 0) break;
+                bytesRead += n;
             }
 
-            // Sync to actual stream position (handles \r\n correctly)
-            _position = fs.Position - reader.CurrentEncoding.GetPreamble().Length;
-            // Actually: just use the stream position after reading
-            _position = fs.Position;
+            // Skip BOM at the very start of the file (only relevant on the first read from offset 0).
+            int idx = 0;
+            if (_position == 0)
+            {
+                byte[] preamble = _encoding.GetPreamble();
+                if (preamble.Length > 0 && bytesRead >= preamble.Length)
+                {
+                    bool match = true;
+                    for (int i = 0; i < preamble.Length; i++)
+                        if (buffer[i] != preamble[i]) { match = false; break; }
+                    if (match) idx = preamble.Length;
+                }
+            }
+
+            while (idx < bytesRead)
+            {
+                int lineStart = idx;
+
+                // Scan forward until we find a newline byte (0x0A).
+                // This is safe for UTF-8/ASCII: 0x0A never appears as part of a multi-byte sequence.
+                while (idx < bytesRead && buffer[idx] != 0x0A) idx++;
+
+                if (idx >= bytesRead)
+                {
+                    // No newline found — partial/incomplete line at the end of the buffer.
+                    // Leave it for the next poll cycle by not advancing _position past this point.
+                    idx = lineStart;
+                    break;
+                }
+
+                // Strip the carriage return from Windows-style CRLF line endings.
+                int contentEnd = idx; // idx is pointing at '\n' (0x0A)
+                if (contentEnd > lineStart && buffer[contentEnd - 1] == 0x0D)
+                    contentEnd--;
+
+                // The byte offset of this line's start in the file is exact.
+                long lineOffset = _position + lineStart;
+                string text = _encoding.GetString(buffer, lineStart, contentEnd - lineStart);
+
+                offsets.Add(lineOffset);
+                lines.Add(text);
+                _lineIndex.AddLine(_sessionId, _filePath, lineOffset);
+
+                idx++; // advance past '\n'
+            }
+
+            // Advance the file position by exactly the number of bytes consumed (complete lines only).
+            _position += idx;
         }
         catch (Exception ex)
         {

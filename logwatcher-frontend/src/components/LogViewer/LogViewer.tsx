@@ -27,6 +27,7 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
   
   // FIX CRITIQUE : On sélectionne explicitement le booléen primitif pour forcer le re-render
   const isFilteringInProgress = useTabStore(state => state.filtersInProgress[sessionId])
+  const filterProgress = tab?.filterProgress
 
   return (
     <div className="log-viewer-root">
@@ -40,7 +41,10 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
       {/* Affichage de l'indicateur visuel de filtrage découplé de l'objet tab */}
       {isFilteringInProgress && (
         <div className="filter-progress-bar">
-          <div className="filter-progress-bar__fill" />
+          <div
+            className="filter-progress-bar__fill"
+            style={filterProgress !== undefined ? { width: `${filterProgress}%`, transition: 'width 0.3s ease' } : undefined}
+          />
         </div>
       )}
 

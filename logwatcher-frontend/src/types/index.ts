@@ -163,6 +163,7 @@ export interface LogTab {
   errorMessage?: string
   environmentColor?: string
   isFiltering?: boolean
+  filterProgress?: number  // 0-100 percent, set by OnFilterProgress, cleared on completion
 }
 
 export type UserFontFamily = 'Cascadia Code' | 'Consolas' | 'Segoe UI' | 'Bahnschrift'
