@@ -19,6 +19,7 @@ export function useLogHub() {
     started.current = true
 
     const hub = getLogHub()
+    const lastReopenAt: Record<string, number> = {}
 
     hub.on('OnNewLines', (sessionId: string, lines: LineDto[], totalLines: number) => {
       addLines(sessionId, lines)
@@ -74,25 +75,50 @@ export function useLogHub() {
       useTabStore.getState().setFilterInProgress(sessionId, false)
     })
 
-    hub.on('OnReload', (sessionId: string) => {
-      clearBuffer(sessionId)
+    hub.on('OnReload', async (sessionId: string) => {
       const currentTab = useTabStore.getState().tabs.find(t => t.sessionId === sessionId)
+      console.info('[LogHub] OnReload received for session', sessionId, 'tab found:', !!currentTab)
+      if (!currentTab) return
+
+      // Reset the frontend view immediately (clear buffer + remount the virtual list).
+      clearBuffer(sessionId)
       updateTab(sessionId, {
         totalLines: 0,
         isIndexed: false,
         newLinesCount: 0,
-        // Bump reloadNonce to force-remount LogVirtualList, resetting all component-local state
-        // (windowStartIndex, inFlight set, virtualizer) exactly like a close/reopen does.
-        reloadNonce: (currentTab?.reloadNonce ?? 0) + 1,
-        // Clear stale viewVersion so post-roll OnLines responses pass the version-mismatch guard.
+        reloadNonce: (currentTab.reloadNonce ?? 0) + 1,
         viewVersion: undefined,
-        // Exit context mode — context window belongs to the old file content.
         contextStartLine: undefined,
         contextTotalLines: undefined,
-        // Clear any in-progress filter state from the previous file.
         isFiltering: false,
         filterProgress: undefined,
+        tailMode: true,
       })
+
+      // ROBUST RECOVERY: fully recreate the backend session (CloseLog + OpenLog) — exactly what a
+      // manual close/reopen does, which is the only reliably-working recovery. Debounced to avoid
+      // tight reopen loops if the file keeps rolling rapidly.
+      const now = Date.now()
+      if (now - (lastReopenAt[sessionId] ?? 0) < 3000) {
+        console.info('[LogHub] OnReload reopen debounced for', sessionId)
+        return
+      }
+      lastReopenAt[sessionId] = now
+
+      try {
+        await hub.invoke('CloseLog', sessionId)
+        await hub.invoke('OpenLog', sessionId, currentTab.serverId, currentTab.filePath, {
+          loadFromEnd: true,
+          initialLines: 500,
+          profileName: currentTab.activeProfileName,
+        })
+        if (currentTab.activeProfileName) {
+          await hub.invoke('SetProfile', sessionId, currentTab.activeProfileName)
+        }
+        console.info('[LogHub] Session reopened after roll:', sessionId)
+      } catch (e) {
+        console.error('[LogHub] Failed to reopen session after roll:', sessionId, e)
+      }
     })
 
     hub.on('OnIndexProgress', (sessionId: string, bytesIndexed: number, totalBytes: number) => {
