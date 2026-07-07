@@ -354,23 +354,13 @@ namespace LogWatcher.Web.Sessions
             {
                 int lineNum = startLine + i;
                 int byteLen = _index.GetLineByteLength(lineNum);
-                if (byteLen <= 0)
-                {
-                    // Index entry exists but byte length is unavailable (e.g. last line with uncertain end).
-                    // Emit a placeholder so the frontend's addLinesAt keys stay contiguous by lineNumber.
-                    results.Add(new LineDto { LineNumber = lineNum, Text = "" });
-                    continue;
-                }
+                if (byteLen <= 0) continue;
 
                 int blockOffset = (int)(offsets[i] - firstOffset);
-                if (blockOffset < 0 || blockOffset + byteLen > block.Length)
-                {
-                    // Block doesn't cover this line (short SMB read). Emit placeholder for same reason.
-                    results.Add(new LineDto { LineNumber = lineNum, Text = "" });
-                    continue;
-                }
+                if (blockOffset < 0 || blockOffset + byteLen > block.Length) continue;
 
                 int end = byteLen;
+                
                 while (end > 0 && blockOffset + end - 1 < block.Length &&
                     (block[blockOffset + end - 1] == '\n' || block[blockOffset + end - 1] == '\r'))
                     end--;
