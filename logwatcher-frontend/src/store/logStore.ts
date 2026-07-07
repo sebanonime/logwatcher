@@ -41,7 +41,11 @@ export const useLogStore = create<LogState>((set, get) => ({
     set(state => {
       const buf = { ...(state.buffers[sessionId] ?? {}) }
       for (let i = 0; i < lines.length; i++) {
-        buf[startLine + i] = lines[i].text
+        // Key by the DTO's own lineNumber (populated by the backend) rather than a positional
+        // offset. This avoids misalignment when the backend omits a line (e.g. short SMB block)
+        // and the response array is compacted — positional indexing would shift every following row.
+        const lineNum = lines[i].lineNumber ?? (startLine + i)
+        buf[lineNum] = lines[i].text
       }
       const keys = Object.keys(buf).map(Number).sort((a, b) => a - b)
       if (keys.length > BUFFER_MAX) {

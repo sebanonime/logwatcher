@@ -156,6 +156,7 @@ export interface LogTab {
   filterIsRegex?: boolean
   filterCaseSensitive?: boolean
   viewVersion?: number
+  reloadNonce?: number
   contextStartLine?: number
   contextTotalLines?: number
   activeProfileName?: string

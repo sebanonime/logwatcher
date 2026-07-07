@@ -76,14 +76,17 @@ export function useLogHub() {
 
     hub.on('OnReload', (sessionId: string) => {
       clearBuffer(sessionId)
+      const currentTab = useTabStore.getState().tabs.find(t => t.sessionId === sessionId)
       updateTab(sessionId, {
         totalLines: 0,
         isIndexed: false,
         newLinesCount: 0,
-        // Clear the stale viewVersion so subsequent OnLines responses with the new version
-        // are not rejected by the version-mismatch guard in the OnLines handler.
+        // Bump reloadNonce to force-remount LogVirtualList, resetting all component-local state
+        // (windowStartIndex, inFlight set, virtualizer) exactly like a close/reopen does.
+        reloadNonce: (currentTab?.reloadNonce ?? 0) + 1,
+        // Clear stale viewVersion so post-roll OnLines responses pass the version-mismatch guard.
         viewVersion: undefined,
-        // Exit context mode — the context window belongs to the old file content.
+        // Exit context mode — context window belongs to the old file content.
         contextStartLine: undefined,
         contextTotalLines: undefined,
         // Clear any in-progress filter state from the previous file.

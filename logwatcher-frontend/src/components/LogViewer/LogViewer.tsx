@@ -86,6 +86,7 @@ export function LogViewer({ sessionId, hub, profileHighlightingRules = [] }: Log
 
       <div className="log-viewer-body">
         <LogVirtualList
+          key={`${sessionId}:${tab?.reloadNonce ?? 0}`}
           sessionId={sessionId}
           hub={hub}
           highlightingRules={profileHighlightingRules}
