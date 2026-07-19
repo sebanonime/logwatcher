@@ -55,8 +55,8 @@
       <CaseSensitive>false</CaseSensitive>
     </StoredFilter>
     <StoredFilter>
-      <Name>0021</Name>
-      <Filter>0021</Filter>
+      <Name>0005</Name>
+      <Filter>0005</Filter>
       <IsRegex>true</IsRegex>
       <CaseSensitive>false</CaseSensitive>
     </StoredFilter>

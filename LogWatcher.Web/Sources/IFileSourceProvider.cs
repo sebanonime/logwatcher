@@ -1,3 +1,5 @@
+#nullable enable
+
 using LogWatcher.Web.Dto;
 
 namespace LogWatcher.Web.Sources

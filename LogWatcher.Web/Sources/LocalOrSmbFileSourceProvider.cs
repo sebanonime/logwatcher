@@ -87,45 +87,91 @@ namespace LogWatcher.Web.Sources
             return buffer;
         }
 
-        public async IAsyncEnumerable<TailChunk> TailAsync(
-            string path, long fromByteOffset,
-            [EnumeratorCancellation] CancellationToken ct)
+        public async IAsyncEnumerable<TailChunk> TailAsync(string path, long fromByteOffset, [EnumeratorCancellation] CancellationToken ct)
         {
             long position = fromByteOffset;
             long previousSize = fromByteOffset;
 
             while (!ct.IsCancellationRequested)
             {
-                var fi = new FileInfo(path);
-                fi.Refresh();
+                long currentLength = 0;
+                bool fileExists = true;
+                
+                // Variables pour stocker le résultat hors du try/catch
+                bool hasChunkToYield = false;
+                TailChunk chunkToYield = default;
+                bool drainFast = false;
 
-                if (!fi.Exists || fi.Length < previousSize)
+                try
                 {
-                    // File was deleted or truncated — signal a reset
-                    position = 0;
-                    previousSize = 0;
-                    yield return new TailChunk(Array.Empty<byte>(), IsReset: true);
-                    await Task.Delay(PollIntervalMs, ct);
-                    continue;
+                    // L'appel à OpenReadStream force Windows à interroger 
+                    // le serveur SMB distant, contournant ainsi le cache
+                    using var fs = OpenReadStream(path);
+                    currentLength = fs.Length;
+
+                    if (currentLength < previousSize)
+                    {
+                        // Le fichier a été supprimé ou tronqué
+                        position = 0;
+                        previousSize = 0;
+                        chunkToYield = new TailChunk(Array.Empty<byte>(), IsReset: true);
+                        hasChunkToYield = true;
+                    }
+                    else if (currentLength > position)
+                    {
+                        int toRead = (int)Math.Min(currentLength - position, BufferSize);
+                        var buf = new byte[toRead];
+                        
+                        fs.Position = position;
+                        int read = await fs.ReadAsync(buf, 0, toRead, ct);
+                        
+                        if (read > 0)
+                        {
+                            position += read;
+                            previousSize = currentLength;
+                            chunkToYield = new TailChunk(buf[..read], IsReset: false);
+                            hasChunkToYield = true;
+                            drainFast = true;
+                        }
+                    }
+                    else 
+                    {
+                        previousSize = currentLength;
+                    }
+                }
+                catch (FileNotFoundException)
+                {
+                    fileExists = false;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    fileExists = false;
+                }
+                catch (Exception)
+                {
+                    // En SMB, le fichier peut être brièvement verrouillé. 
+                    // On ignore pour retenter à la prochaine boucle.
                 }
 
-                if (fi.Length > position)
+                if (!fileExists)
                 {
-                    int toRead = (int)Math.Min(fi.Length - position, BufferSize);
-                    var buf = new byte[toRead];
-                    using var fs = OpenReadStream(path);
-                    fs.Position = position;
-                    int read = await fs.ReadAsync(buf, 0, toRead, ct);
-                    if (read > 0)
+                    position = 0;
+                    previousSize = 0;
+                    chunkToYield = new TailChunk(Array.Empty<byte>(), IsReset: true);
+                    hasChunkToYield = true;
+                }
+
+                // Le yield return se fait en toute sécurité HORS du bloc try/catch
+                if (hasChunkToYield)
+                {
+                    yield return chunkToYield;
+                    
+                    if (drainFast)
                     {
-                        position += read;
-                        previousSize = fi.Length;
-                        yield return new TailChunk(buf[..read], IsReset: false);
-                        continue; // Don't delay — drain as fast as possible
+                        continue; // On draine le buffer sans attendre
                     }
                 }
 
-                previousSize = fi.Exists ? fi.Length : 0;
                 await Task.Delay(PollIntervalMs, ct);
             }
         }
