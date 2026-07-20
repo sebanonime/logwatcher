@@ -129,7 +129,7 @@ namespace LogWatcher.Web.Config
             {
                 // Fallback: try old WinForms XmlCustomSerializer_old1 format
                 try { return ReadOldFormatProfile(path); }
-                catch (Exception ex) { return null; }
+                catch { return null; }
             }
         }
 

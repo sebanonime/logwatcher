@@ -77,11 +77,36 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const virtualItems = virtualizer.getVirtualItems()
 
   // Déclenchement du fetch SignalR (via useVirtualLines)
+  const persistentGapsRef = useRef<Map<number, number>>(new Map())
   useEffect(() => {
     if (virtualItems.length === 0) return
     const globalStart = windowStartIndex + virtualItems[0].index
     ensureRange(globalStart, virtualItems.length)
-  }, [virtualItems, windowStartIndex, ensureRange])
+
+    // TEMP DIAGNOSTIC (missing-lines investigation): flag lines that stay undefined
+    // in the buffer for longer than expected while visible on screen.
+    const now = Date.now()
+    const buf = useLogStore.getState().buffers[sessionId] ?? {}
+    const gaps = persistentGapsRef.current
+    const stillVisible = new Set<number>()
+    for (const vItem of virtualItems) {
+      const lineNum = windowStartIndex + vItem.index
+      if (lineNum < 0 || lineNum >= totalLines) continue
+      stillVisible.add(lineNum)
+      if (buf[lineNum] === undefined) {
+        if (!gaps.has(lineNum)) gaps.set(lineNum, now)
+      } else {
+        gaps.delete(lineNum)
+      }
+    }
+    for (const [lineNum, firstSeen] of gaps) {
+      if (!stillVisible.has(lineNum)) { gaps.delete(lineNum); continue }
+      if (now - firstSeen > 2000) {
+        console.warn(`[LogVirtualList] Persistent gap: line ${lineNum} still missing after 2s (session ${sessionId})`)
+        gaps.delete(lineNum)
+      }
+    }
+  }, [virtualItems, windowStartIndex, ensureRange, sessionId, totalLines])
 
   // ── GESTION DE LA RECONNEXION SIGNALR (Sortie de veille du navigateur) ──
   useEffect(() => {

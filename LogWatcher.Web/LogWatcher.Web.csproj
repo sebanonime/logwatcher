@@ -26,6 +26,12 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Logging (NLog) -->
+  <ItemGroup>
+    <PackageReference Include="NLog.Web.AspNetCore" Version="6.1.*" />
+    <None Include="nlog.config" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Protobuf Include="Protos\agent.proto" GrpcServices="Server" />
   </ItemGroup>

@@ -14,6 +14,10 @@ namespace LogWatcher.Web.Sessions
     /// </summary>
     public class WatchSession : IAsyncDisposable
     {
+        // Temporary diagnostics logger for the "rare missing lines during live tail" investigation.
+        // Isolated to logs/tail-diag-*.log via nlog.config (see logger name="TailDiag" rule).
+        private static readonly NLog.Logger _diag = NLog.LogManager.GetLogger("TailDiag");
+
         public string SessionId { get; }
         public string ServerId { get; }
         public string FilePath { get; }
@@ -145,21 +149,35 @@ namespace LogWatcher.Web.Sessions
                             if (chunk.Bytes.Length == 0) continue;
 
                             int prevCount = _index.Count;
+                            long bytesBefore = _index.TotalBytes;
+                            bool chunkEndsWithNewline = chunk.Bytes.Length > 0 && chunk.Bytes[^1] == (byte)'\n';
                             await _builder.BuildAsync(_index, ToAsyncEnum(chunk.Bytes), null, ct);
                             currentTailOffset = _index.TotalBytes;
 
                             int newCount = _index.Count - prevCount;
+                            _diag.Trace(
+                                "Chunk file={0} bytesBefore={1} bytesAfter={2} chunkLen={3} endsWithNL={4} prevCount={5} newCount={6}",
+                                FilePath, bytesBefore, _index.TotalBytes, chunk.Bytes.Length, chunkEndsWithNewline, prevCount, newCount);
                             if (newCount <= 0) continue;
 
                             // ⚠️ Attention ici : Les lignes ne sont envoyées que si _tailMode est à TRUE
                             if (_tailMode && !_filterEnabled)
                             {
                                 var newLines = await ReadLinesAsync(prevCount, newCount, ct);
+                                if (newLines.Length < newCount)
+                                    _diag.Warn(
+                                        "Gap? file={0} requestedStart={1} requestedCount={2} rawReadCount={3} — boundary line at index {4} may have been skipped",
+                                        FilePath, prevCount, newCount, newLines.Length, prevCount - 1);
                                 var hiddenRules = _activeHiddenLines;
                                 if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
                                     newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
                                 if (newLines.Length > 0)
+                                {
                                     await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, newLines, _index.Count);
+                                    _diag.Debug(
+                                        "OnNewLines file={0} requestedStart={1} requestedCount={2} sentFirst={3} sentLast={4} sentCount={5} indexCount={6}",
+                                        FilePath, prevCount, newCount, newLines[0].LineNumber, newLines[^1].LineNumber, newLines.Length, _index.Count);
+                                }
                             }
                             else if (_tailMode && _filterEnabled)
                             {
@@ -167,6 +185,10 @@ namespace LogWatcher.Web.Sessions
                                 if (filter != null && !_isFilterBuilding)
                                 {
                                     var rawLines = await ReadLinesAsync(prevCount, newCount, ct);
+                                    if (rawLines.Length < newCount)
+                                        _diag.Warn(
+                                            "Gap? (filtered) file={0} requestedStart={1} requestedCount={2} rawReadCount={3} — boundary line at index {4} may have been skipped",
+                                            FilePath, prevCount, newCount, rawLines.Length, prevCount - 1);
                                     var visibleLines = FilterNewLinesInline(rawLines);
                                     if (visibleLines.Length > 0)
                                     {
@@ -177,6 +199,9 @@ namespace LogWatcher.Web.Sessions
                                             .Select((l, i) => new LineDto { LineNumber = filterStart + i, Text = l.Text })
                                             .ToArray();
                                         await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, remapped, filter.Count);
+                                        _diag.Debug(
+                                            "OnNewLines(filtered) file={0} requestedStart={1} requestedCount={2} sentFirst={3} sentLast={4} sentCount={5} filterCount={6}",
+                                            FilePath, prevCount, newCount, remapped[0].LineNumber, remapped[^1].LineNumber, remapped.Length, filter.Count);
                                     }
                                 }
                             }
@@ -190,6 +215,9 @@ namespace LogWatcher.Web.Sessions
                                 int visibleForStats = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
                                 await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                                     new FileStatsDto { TotalLines = visibleForStats, SizeBytes = _index.TotalBytes, IsIndexed = true, ServerId = ServerId, FilePath = FilePath, ViewVersion = ViewVersion });
+                                _diag.Trace(
+                                    "OnFileStats file={0} totalLines={1} totalBytes={2} viewVersion={3}",
+                                    FilePath, visibleForStats, _index.TotalBytes, ViewVersion);
                             }
                         }
 
@@ -336,18 +364,29 @@ namespace LogWatcher.Web.Sessions
                         }
                     }
                 }
-                catch 
+                catch (Exception ex)
                 { 
                     // On ignore silencieusement les erreurs d'accès réseau pour retenter
+                    _diag.Trace(ex, "ReadLinesAsync retry exception file={0} startLine={1} count={2} attempt={3}", FilePath, startLine, count, retryCount);
                 }
 
                 retryCount++;
                 await Task.Delay(250, ct); // Petite pause de 250ms avant de redemander au réseau
             }
 
+            if (retryCount > 0)
+                _diag.Debug(
+                    "ReadLinesAsync SMB retry file={0} startLine={1} count={2} attempts={3} dataAcquired={4}",
+                    FilePath, startLine, count, retryCount, dataAcquired);
+
             // Si après toutes les tentatives on a toujours rien, on retourne un tableau vide
             if (!dataAcquired || block == null || block.Length == 0)
+            {
+                _diag.Warn(
+                    "ReadLinesAsync gave up file={0} startLine={1} count={2} expectedLength={3} — returning empty array",
+                    FilePath, startLine, count, expectedLength);
                 return Array.Empty<LineDto>();
+            }
 
             var results = new List<LineDto>(actual);
             for (int i = 0; i < actual; i++)

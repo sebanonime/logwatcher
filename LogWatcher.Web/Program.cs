@@ -4,11 +4,16 @@ using LogWatcher.Web.Hubs;
 using LogWatcher.Web.Services;
 using LogWatcher.Web.Sessions;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using NLog.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
+
+// ── Logging (NLog) ─────────────────────────────────────────────────────────
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
 
 // ── gRPC dedicated port ───────────────────────────────────────────────────────
 int grpcPort = config.GetValue<int>("Agent:GrpcListeningPort", 0);
@@ -129,4 +134,16 @@ app.Lifetime.ApplicationStarted.Register(() =>
     }
 });
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex)
+{
+    NLog.LogManager.GetCurrentClassLogger().Fatal(ex, "Application stopped because of an exception");
+    throw;
+}
+finally
+{
+    NLog.LogManager.Shutdown();
+}

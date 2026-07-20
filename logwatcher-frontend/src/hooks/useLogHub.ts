@@ -28,8 +28,14 @@ export function useLogHub() {
 
     hub.on('OnLines', (sessionId: string, startLine: number, lines: LineDto[], viewVersion?: number) => {
       const tab = useTabStore.getState().tabs.find(t => t.sessionId === sessionId)
-      if (typeof viewVersion === 'number' && typeof tab?.viewVersion === 'number' && viewVersion !== tab.viewVersion)
+      if (typeof viewVersion === 'number' && typeof tab?.viewVersion === 'number' && viewVersion !== tab.viewVersion) {
+        // TEMP DIAGNOSTIC (missing-lines investigation): message discarded because the
+        // view changed (filter/reload) between the request and this response.
+        console.warn(
+          `[LogHub] OnLines dropped (viewVersion mismatch) session=${sessionId} startLine=${startLine} count=${lines.length} responseVersion=${viewVersion} tabVersion=${tab?.viewVersion}`
+        )
         return
+      }
 
       if (typeof tab?.contextStartLine === 'number' && typeof tab?.contextTotalLines === 'number') {
         const localStart = startLine - tab.contextStartLine
