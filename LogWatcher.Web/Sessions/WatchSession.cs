@@ -160,14 +160,23 @@ namespace LogWatcher.Web.Sessions
                                 FilePath, bytesBefore, _index.TotalBytes, chunk.Bytes.Length, chunkEndsWithNewline, prevCount, newCount);
                             if (newCount <= 0) continue;
 
+                            // BuildAsync only records a line's offset once its trailing '\n' is seen, so the
+                            // line that was still "pending" (incomplete) before this chunk arrived — index
+                            // prevCount-1 — is the FIRST line actually completed by this chunk, not prevCount.
+                            // Re-read starting one line earlier so that just-completed boundary line is
+                            // (re-)pushed; the frontend keys buffered lines by LineNumber, so resending an
+                            // already-seen line is a safe, idempotent overwrite.
+                            int readStart = Math.Max(0, prevCount - 1);
+                            int readCount = newCount + (prevCount - readStart);
+
                             // ⚠️ Attention ici : Les lignes ne sont envoyées que si _tailMode est à TRUE
                             if (_tailMode && !_filterEnabled)
                             {
-                                var newLines = await ReadLinesAsync(prevCount, newCount, ct);
-                                if (newLines.Length < newCount)
+                                var newLines = await ReadLinesAsync(readStart, readCount, ct);
+                                if (newLines.Length < readCount)
                                     _diag.Warn(
-                                        "Gap? file={0} requestedStart={1} requestedCount={2} rawReadCount={3} — boundary line at index {4} may have been skipped",
-                                        FilePath, prevCount, newCount, newLines.Length, prevCount - 1);
+                                        "Gap? file={0} requestedStart={1} requestedCount={2} rawReadCount={3}",
+                                        FilePath, readStart, readCount, newLines.Length);
                                 var hiddenRules = _activeHiddenLines;
                                 if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
                                     newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
@@ -176,7 +185,7 @@ namespace LogWatcher.Web.Sessions
                                     await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, newLines, _index.Count);
                                     _diag.Debug(
                                         "OnNewLines file={0} requestedStart={1} requestedCount={2} sentFirst={3} sentLast={4} sentCount={5} indexCount={6}",
-                                        FilePath, prevCount, newCount, newLines[0].LineNumber, newLines[^1].LineNumber, newLines.Length, _index.Count);
+                                        FilePath, readStart, readCount, newLines[0].LineNumber, newLines[^1].LineNumber, newLines.Length, _index.Count);
                                 }
                             }
                             else if (_tailMode && _filterEnabled)
@@ -184,12 +193,26 @@ namespace LogWatcher.Web.Sessions
                                 var filter = Volatile.Read(ref _filter);
                                 if (filter != null && !_isFilterBuilding)
                                 {
-                                    var rawLines = await ReadLinesAsync(prevCount, newCount, ct);
-                                    if (rawLines.Length < newCount)
+                                    var rawLines = await ReadLinesAsync(readStart, readCount, ct);
+                                    if (rawLines.Length < readCount)
                                         _diag.Warn(
-                                            "Gap? (filtered) file={0} requestedStart={1} requestedCount={2} rawReadCount={3} — boundary line at index {4} may have been skipped",
-                                            FilePath, prevCount, newCount, rawLines.Length, prevCount - 1);
+                                            "Gap? (filtered) file={0} requestedStart={1} requestedCount={2} rawReadCount={3}",
+                                            FilePath, readStart, readCount, rawLines.Length);
                                     var visibleLines = FilterNewLinesInline(rawLines);
+
+                                    // FilteredLineIndex is an append-only, ordered list of original line
+                                    // numbers with no de-duplication. Because readStart intentionally
+                                    // overlaps the previous iteration's last line (to catch it once it
+                                    // transitions from "still being written" to "complete"), that same
+                                    // line could already be the last entry in the filter mapping (e.g. its
+                                    // still-growing/torn text already matched the filter last time). Skip
+                                    // it here to avoid inserting a duplicate mapping entry.
+                                    if (visibleLines.Length > 0 && filter.Count > 0 &&
+                                        filter.GetOriginalLine(filter.Count - 1) == visibleLines[0].LineNumber)
+                                    {
+                                        visibleLines = visibleLines.Skip(1).ToArray();
+                                    }
+
                                     if (visibleLines.Length > 0)
                                     {
                                         int filterStart = filter.Count;
@@ -201,7 +224,7 @@ namespace LogWatcher.Web.Sessions
                                         await SendToGroupAndOpeningClientAsync("OnNewLines", SessionId, remapped, filter.Count);
                                         _diag.Debug(
                                             "OnNewLines(filtered) file={0} requestedStart={1} requestedCount={2} sentFirst={3} sentLast={4} sentCount={5} filterCount={6}",
-                                            FilePath, prevCount, newCount, remapped[0].LineNumber, remapped[^1].LineNumber, remapped.Length, filter.Count);
+                                            FilePath, readStart, readCount, remapped[0].LineNumber, remapped[^1].LineNumber, remapped.Length, filter.Count);
                                     }
                                 }
                             }
