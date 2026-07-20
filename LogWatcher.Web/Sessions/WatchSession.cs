@@ -169,14 +169,20 @@ namespace LogWatcher.Web.Sessions
                             int readStart = Math.Max(0, prevCount - 1);
                             int readCount = newCount + (prevCount - readStart);
 
+                            // The last line of the requested range (index _index.Count-1) is the new "pending"
+                            // trailing line. When the chunk ended on a newline that line is empty (byteLen 0)
+                            // and ReadLinesAsync legitimately skips it — so it is NOT a gap. Only warn when we
+                            // read fewer lines than the real (non-trailing-empty) expectation.
+                            int expectedReadable = readCount - (chunkEndsWithNewline ? 1 : 0);
+
                             // ⚠️ Attention ici : Les lignes ne sont envoyées que si _tailMode est à TRUE
                             if (_tailMode && !_filterEnabled)
                             {
                                 var newLines = await ReadLinesAsync(readStart, readCount, ct);
-                                if (newLines.Length < readCount)
+                                if (newLines.Length < expectedReadable)
                                     _diag.Warn(
-                                        "Gap? file={0} requestedStart={1} requestedCount={2} rawReadCount={3}",
-                                        FilePath, readStart, readCount, newLines.Length);
+                                        "REAL GAP file={0} requestedStart={1} requestedCount={2} expectedReadable={3} rawReadCount={4}",
+                                        FilePath, readStart, readCount, expectedReadable, newLines.Length);
                                 var hiddenRules = _activeHiddenLines;
                                 if (hiddenRules.Any(h => h.IsActive && !string.IsNullOrWhiteSpace(h.Text)))
                                     newLines = newLines.Where(l => !IsHiddenByRules(l.Text, hiddenRules)).ToArray();
@@ -194,10 +200,10 @@ namespace LogWatcher.Web.Sessions
                                 if (filter != null && !_isFilterBuilding)
                                 {
                                     var rawLines = await ReadLinesAsync(readStart, readCount, ct);
-                                    if (rawLines.Length < readCount)
+                                    if (rawLines.Length < expectedReadable)
                                         _diag.Warn(
-                                            "Gap? (filtered) file={0} requestedStart={1} requestedCount={2} rawReadCount={3}",
-                                            FilePath, readStart, readCount, rawLines.Length);
+                                            "REAL GAP (filtered) file={0} requestedStart={1} requestedCount={2} expectedReadable={3} rawReadCount={4}",
+                                            FilePath, readStart, readCount, expectedReadable, rawLines.Length);
                                     var visibleLines = FilterNewLinesInline(rawLines);
 
                                     // FilteredLineIndex is an append-only, ordered list of original line

@@ -92,6 +92,9 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
     for (const vItem of virtualItems) {
       const lineNum = windowStartIndex + vItem.index
       if (lineNum < 0 || lineNum >= totalLines) continue
+      // Ignore the last line: the backend index keeps one empty "pending" trailing line whenever the
+      // file currently ends with a newline, which legitimately has no content until more is written.
+      if (lineNum >= totalLines - 1) continue
       stillVisible.add(lineNum)
       if (buf[lineNum] === undefined) {
         if (!gaps.has(lineNum)) gaps.set(lineNum, now)
