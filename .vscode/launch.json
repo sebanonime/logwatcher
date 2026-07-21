@@ -22,6 +22,25 @@
         "group": "fullstack",
         "label": "Backend (.NET)"
       }
+    },
+    {
+      "name": "LogWatcher.Agent",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/LogWatcher.Agent/bin/Debug/net10.0/LogWatcher.Agent.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/LogWatcher.Agent",
+      "stopAtEntry": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Web + Agent",
+      "configurations": [
+        "Full Stack",
+        "LogWatcher.Agent"
+      ]
     }
   ]
 }

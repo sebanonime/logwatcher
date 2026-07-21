@@ -188,6 +188,7 @@ public class AgentGrpcClient : IAsyncDisposable
     {
         try
         {
+            _log.LogInformation("ListFiles: {Dir}", cmd.Directory);
             var result = new PushFileListMsg { RequestId = cmd.RequestId };
             if (Directory.Exists(cmd.Directory))
             {

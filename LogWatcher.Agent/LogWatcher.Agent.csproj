@@ -4,6 +4,12 @@
     <ProjectReference Include="..\Common\Common.csproj" />
   </ItemGroup>
 
+  <!-- Dépendances d'hébergement Service Windows / Systemd -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.*" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="8.0.*" />
+  </ItemGroup>
+
   <!-- Dépendances spécifiques à .NET 8.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.*" />
@@ -18,6 +24,7 @@
 
   <!-- Packages communs (gRPC, Protobuf) -->
   <ItemGroup>
+	<PackageReference Include="NLog.Web.AspNetCore" Version="5.*" />
     <PackageReference Include="Grpc.AspNetCore" Version="2.67.*" />
     <PackageReference Include="Google.Protobuf" Version="3.29.*" />
     <PackageReference Include="Grpc.Tools" Version="2.67.*">
@@ -25,15 +32,21 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+  
+  <ItemGroup>
+    <None Update="NLog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
-    <Protobuf Include="Protos\agent.proto" GrpcServices="Server" />
+    <Protobuf Include="Protos\agent.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <PropertyGroup>
     <TargetFrameworks Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">net8.0;net10.0</TargetFrameworks>
     <TargetFrameworks Condition="!$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">net8.0</TargetFrameworks>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
