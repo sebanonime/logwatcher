@@ -7,15 +7,20 @@ interface UiState {
   theme: ThemeMode
   fontFamily: UserFontFamily
   fontSize: number
+  showLineWatchdogPanel: boolean
   setTheme: (theme: ThemeMode) => void
   toggleTheme: () => void
   setFontFamily: (fontFamily: UserFontFamily) => void
   setFontSize: (fontSize: number) => void
+  setShowLineWatchdogPanel: (show: boolean) => void
 }
 
 const THEME_KEY = 'logwatcher_theme'
 const FONT_FAMILY_KEY = 'logwatcher_font_family'
 const FONT_SIZE_KEY = 'logwatcher_font_size'
+// Admin-only, per-browser setting: shows/hides the Line Watchdog panel in the inspector rail.
+// Intentionally local to this browser only (not synced server-side), same as theme/font above.
+const SHOW_LINE_WATCHDOG_PANEL_KEY = 'logwatcher_show_line_watchdog_panel'
 
 function readInitialTheme(): ThemeMode {
   const saved = localStorage.getItem(THEME_KEY)
@@ -34,10 +39,15 @@ function readInitialFontSize(): number {
   return Number.isFinite(parsed) && parsed >= 10 && parsed <= 22 ? parsed : 11
 }
 
+function readInitialShowLineWatchdogPanel(): boolean {
+  return localStorage.getItem(SHOW_LINE_WATCHDOG_PANEL_KEY) === '1'
+}
+
 export const useUiStore = create<UiState>((set, get) => ({
   theme: readInitialTheme(),
   fontFamily: readInitialFontFamily(),
   fontSize: readInitialFontSize(),
+  showLineWatchdogPanel: readInitialShowLineWatchdogPanel(),
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme)
     set({ theme })
@@ -54,5 +64,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   setFontSize: (fontSize) => {
     localStorage.setItem(FONT_SIZE_KEY, String(fontSize))
     set({ fontSize })
+  },
+  setShowLineWatchdogPanel: (show) => {
+    localStorage.setItem(SHOW_LINE_WATCHDOG_PANEL_KEY, show ? '1' : '0')
+    set({ showLineWatchdogPanel: show })
   },
 }))

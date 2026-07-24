@@ -93,6 +93,10 @@ public class AgentFileWatcher : IDisposable
                     var (lines, offsets) = ReadNewLines();
                     _lastKnownSize = currentSize;
 
+                    _log.LogDebug(
+                        "session={SessionId} path={Path} currentSize={CurrentSize} position={Position} linesRead={LinesRead}",
+                        _sessionId, _filePath, currentSize, _position, lines.Length);
+
                     if (lines.Length > 0)
                     {
                         await EmitAsync(lines, offsets, !sentInitial, isReset: false, ct);
@@ -102,6 +106,15 @@ public class AgentFileWatcher : IDisposable
                     {
                         // File exists but no lines read yet (e.g. fromOffset == EOF)
                         sentInitial = true;
+                    }
+                    else
+                    {
+                        // File grew (currentSize > _position) but ReadNewLines() produced zero
+                        // lines — e.g. the new bytes have no trailing newline yet. Not necessarily
+                        // a bug, but worth a trace so a persistent stall shows up here.
+                        _log.LogDebug(
+                            "session={SessionId} path={Path} grew from {Position} to {CurrentSize} but no complete line was read yet.",
+                            _sessionId, _filePath, _position, currentSize);
                     }
                 }
                 else if (!sentInitial)

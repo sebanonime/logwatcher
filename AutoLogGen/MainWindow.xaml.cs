@@ -19,6 +19,8 @@ namespace AutoLogGen
         private bool _isLoopRunning = false;
         private bool _isBurstRunning = false;
         private bool _isFillRunning = false;
+        private bool _isSoakRunning = false;
+        private CancellationTokenSource? _soakCts;
 
         public MainWindow()
         {
@@ -234,6 +236,141 @@ namespace AutoLogGen
             UpdateStatus($"File filled! Size: {actualMB} MB | Line: #{_currentLineNumber}{activeLoopStatus}");
         }
 
+        // --- Action 4: Soak Test (bounded-duration unattended run) ---
+        private async void BtnSoak_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isSoakRunning)
+            {
+                _soakCts?.Cancel();
+                return;
+            }
+
+            if (!double.TryParse(TxtSoakDurationHours.Text, out double durationHours) || durationHours <= 0
+                || !int.TryParse(TxtLoopInterval.Text, out int intervalMs) || intervalMs <= 0
+                || !int.TryParse(TxtSoakBurstEveryMin.Text, out int burstEveryMin) || burstEveryMin < 0
+                || !int.TryParse(TxtBurstLines.Text, out int burstLines) || burstLines <= 0
+                || !int.TryParse(TxtSoakRollEveryMin.Text, out int rollEveryMin) || rollEveryMin < 0
+                || !int.TryParse(TxtSoakIdleEveryMin.Text, out int idleEveryMin) || idleEveryMin < 0
+                || !int.TryParse(TxtSoakIdleDurationMin.Text, out int idleDurationMin) || idleDurationMin < 0)
+            {
+                MessageBox.Show("Please enter valid soak test parameters.", "Invalid Input", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            ConfigureLogDirectoryAndCounter();
+            _soakCts = new CancellationTokenSource();
+            _isSoakRunning = true;
+            BtnSoak.Content = "Stop Soak Test";
+            UpdateUIState();
+
+            string scheduleLogPath = Path.Combine(Path.GetDirectoryName(_activeFilePath) ?? ".", "soak-schedule.log");
+            void LogSchedule(string evt)
+            {
+                try { File.AppendAllText(scheduleLogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} | {evt}{Environment.NewLine}"); }
+                catch { /* best effort — must never crash the soak run */ }
+            }
+
+            var token = _soakCts.Token;
+            var endAt = DateTime.Now.AddHours(durationHours);
+            LogSchedule($"SOAK START duration={durationHours}h interval={intervalMs}ms burstEvery={burstEveryMin}min burstLines={burstLines} rollEvery={rollEveryMin}min idleEvery={idleEveryMin}min idleDuration={idleDurationMin}min startLine=#{_currentLineNumber}");
+            UpdateStatus($"Soak test running until {endAt:yyyy-MM-dd HH:mm:ss}...");
+
+            var lastBurst = DateTime.Now;
+            var lastRoll = DateTime.Now;
+            var lastIdle = DateTime.Now;
+
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(intervalMs));
+                while (!token.IsCancellationRequested && DateTime.Now < endAt)
+                {
+                    var now = DateTime.Now;
+
+                    if (idleEveryMin > 0 && (now - lastIdle).TotalMinutes >= idleEveryMin)
+                    {
+                        lastIdle = DateTime.Now;
+                        LogSchedule($"IDLE START duration={idleDurationMin}min line=#{_currentLineNumber}");
+                        UpdateStatus($"Soak test: idle pause ({idleDurationMin} min)...");
+                        try { await Task.Delay(TimeSpan.FromMinutes(idleDurationMin), token); }
+                        catch (OperationCanceledException) { break; }
+                        LogSchedule($"IDLE END line=#{_currentLineNumber}");
+                        lastBurst = DateTime.Now;
+                        lastRoll = DateTime.Now;
+                        UpdateStatus($"Soak test running until {endAt:yyyy-MM-dd HH:mm:ss}...");
+                        continue;
+                    }
+
+                    if (rollEveryMin > 0 && (now - lastRoll).TotalMinutes >= rollEveryMin)
+                    {
+                        lastRoll = now;
+                        SimulateRoll();
+                        LogSchedule($"ROLL simulated line=#{_currentLineNumber}");
+                    }
+
+                    if (burstEveryMin > 0 && (now - lastBurst).TotalMinutes >= burstEveryMin)
+                    {
+                        lastBurst = now;
+                        LogSchedule($"BURST start count={burstLines} line=#{_currentLineNumber}");
+                        await Task.Run(() =>
+                        {
+                            Parallel.For(0, burstLines, _ => LogLine("SOAK-BURST"));
+                            LogManager.Flush();
+                        });
+                        LogSchedule($"BURST end line=#{_currentLineNumber}");
+                    }
+
+                    LogLine("SOAK");
+
+                    if (!await timer.WaitForNextTickAsync(token)) break;
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally
+            {
+                LogSchedule($"SOAK END line=#{_currentLineNumber}");
+                _isSoakRunning = false;
+                BtnSoak.Content = "Start Soak Test";
+                UpdateUIState();
+                UpdateStatus($"Soak test finished at line #{_currentLineNumber}.");
+            }
+        }
+
+        /// <summary>
+        /// Simulates a real-world log rotation: archives the current file under a timestamped name
+        /// and lets NLog create a fresh file at the original path, while _currentLineNumber keeps
+        /// incrementing (mirroring apps that continue numbering across a rotation).
+        /// Switches NLog's logPath variable away and back so the file handle is released before the
+        /// rename, avoiding file-lock issues.
+        /// </summary>
+        private void SimulateRoll()
+        {
+            lock (_logLock)
+            {
+                try
+                {
+                    string original = _activeFilePath;
+                    string tempPath = original + ".switching";
+
+                    LogManager.Configuration.Variables["logPath"] = tempPath;
+                    LogManager.ReconfigExistingLoggers();
+                    LogManager.Flush();
+
+                    if (File.Exists(original))
+                    {
+                        string archivePath = Path.Combine(
+                            Path.GetDirectoryName(original) ?? ".",
+                            $"{Path.GetFileNameWithoutExtension(original)}.{DateTime.Now:yyyyMMdd-HHmmss}{Path.GetExtension(original)}");
+                        File.Move(original, archivePath, overwrite: true);
+                    }
+                    if (File.Exists(tempPath)) File.Delete(tempPath);
+
+                    LogManager.Configuration.Variables["logPath"] = original;
+                    LogManager.ReconfigExistingLoggers();
+                }
+                catch { /* best effort — a failed simulated roll shouldn't crash the soak test */ }
+            }
+        }
+
         private void TxtFilePath_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (IsLoaded)
@@ -247,18 +384,27 @@ namespace AutoLogGen
             Dispatcher.Invoke(() =>
             {
                 // Disable file path input if any operation is actively running
-                bool anyRunning = _isLoopRunning || _isBurstRunning || _isFillRunning;
+                bool anyRunning = _isLoopRunning || _isBurstRunning || _isFillRunning || _isSoakRunning;
                 TxtFilePath.IsEnabled = !anyRunning;
 
                 // Loop inputs enabled when loop is stopped
-                TxtLoopInterval.IsEnabled = !_isLoopRunning;
+                TxtLoopInterval.IsEnabled = !_isLoopRunning && !_isSoakRunning;
+                BtnLoop.IsEnabled = !_isSoakRunning;
 
                 // Burst and Fill buttons remain available during loop, but disabled while running their own tasks
-                TxtBurstLines.IsEnabled = !_isBurstRunning;
-                BtnBurst.IsEnabled = !_isBurstRunning;
+                TxtBurstLines.IsEnabled = !_isBurstRunning && !_isSoakRunning;
+                BtnBurst.IsEnabled = !_isBurstRunning && !_isSoakRunning;
 
                 TxtTargetMB.IsEnabled = !_isFillRunning;
-                BtnFillFile.IsEnabled = !_isFillRunning;
+                BtnFillFile.IsEnabled = !_isFillRunning && !_isSoakRunning;
+
+                // Soak test parameter inputs locked while the soak test itself is running
+                bool soakInputsEnabled = !_isSoakRunning;
+                TxtSoakDurationHours.IsEnabled = soakInputsEnabled;
+                TxtSoakBurstEveryMin.IsEnabled = soakInputsEnabled;
+                TxtSoakRollEveryMin.IsEnabled = soakInputsEnabled;
+                TxtSoakIdleEveryMin.IsEnabled = soakInputsEnabled;
+                TxtSoakIdleDurationMin.IsEnabled = soakInputsEnabled;
             });
         }
 

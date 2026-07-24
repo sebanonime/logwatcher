@@ -897,8 +897,19 @@ namespace LogWatcher.Web.Sessions
                         FilePath = FilePath,
                         ViewVersion = ViewVersion
                     });
+                _diag.Info("HandleAgentPushAsync RESET file={0} session={1}", FilePath, SessionId);
                 return;
             }
+
+            int prevIndexCount = _index.Count;
+            long expectedNextOffset = _index.TotalBytes;
+            if (offsets.Length > 0 && expectedNextOffset > 0 && offsets[0] != expectedNextOffset)
+            {
+                _diag.Warn(
+                    "HandleAgentPushAsync POSSIBLE GAP/OVERLAP file={0} session={1} expectedNextOffset={2} actualFirstOffset={3} prevIndexCount={4} pushCount={5}",
+                    FilePath, SessionId, expectedNextOffset, offsets[0], prevIndexCount, lines.Length);
+            }
+
             foreach (var (line, offset) in lines.Zip(offsets))
             {
                 _index.AddOffset(offset);
@@ -907,6 +918,10 @@ namespace LogWatcher.Web.Sessions
                 // per-line offsets (from the agent's fixed ReadNewLines) are exact.
                 _index.TotalBytes = offset + _encoding.GetByteCount(line) + 2;
             }
+
+            _diag.Debug(
+                "HandleAgentPushAsync file={0} session={1} isInitialLoad={2} pushCount={3} prevIndexCount={4} newIndexCount={5}",
+                FilePath, SessionId, isInitialLoad, lines.Length, prevIndexCount, _index.Count);
 
             if (!_tailMode) return;
 

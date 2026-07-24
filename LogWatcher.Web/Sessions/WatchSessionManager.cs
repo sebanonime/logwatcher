@@ -14,6 +14,10 @@ namespace LogWatcher.Web.Sessions
     /// </summary>
     public class WatchSessionManager
     {
+        // Diagnostics for the agent gRPC push path (see WatchSession's own "TailDiag" logger for the
+        // SMB tail path). Isolated to logs/tail-diag-*.log via nlog.config (logger name="TailDiag").
+        private static readonly NLog.Logger _diag = NLog.LogManager.GetLogger("TailDiag");
+
         private readonly ConcurrentDictionary<string, WatchSession> _sessions = new();
         // Tracks which connections belong to which sessions (for cleanup on disconnect)
         private readonly ConcurrentDictionary<string, HashSet<string>> _connectionSessions = new();
@@ -176,11 +180,20 @@ namespace LogWatcher.Web.Sessions
 
         public void OnAgentReconnected(string agentId)
         {
-            // Re-send WatchFile to all sessions that use this agent
+            // Re-send WatchFile to all sessions that use this agent.
+            // BUG FIX: session.ServerId is the servers.json config id (e.g. "server-01"), not the
+            // agent's own AgentId (e.g. "agent-01") — they are different strings. Resolve the actual
+            // AgentId configured for each session's server before comparing, otherwise this condition
+            // is never true and no session ever resumes after an agent reconnects.
             foreach (var session in _sessions.Values)
             {
-                if (session.ServerId == agentId)
+                var server = _servers.GetById(session.ServerId);
+                if (server?.Type == "agent" && server.AgentId == agentId)
+                {
+                    _diag.Info("Agent reconnected agentId={0}; resuming session={1} file={2}",
+                        agentId, session.SessionId, session.FilePath);
                     _ = session.StartAsync(); // Restart tail from last known position
+                }
             }
         }
         public WatchSession GetSession(string sessionId)

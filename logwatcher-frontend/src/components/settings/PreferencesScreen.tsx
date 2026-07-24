@@ -264,15 +264,16 @@ function HighlightListEditor({ title, rules, onChange }: {
 
 export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
   const { defaultHighlights, profiles, setPreferences } = usePreferencesStore()
-  const { theme, setTheme, fontFamily, setFontFamily, fontSize, setFontSize } = useUiStore()
+  const { theme, setTheme, fontFamily, setFontFamily, fontSize, setFontSize, showLineWatchdogPanel, setShowLineWatchdogPanel } = useUiStore()
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'prefs' | 'highlights' | 'profiles'>('profiles')
+  const [activeTab, setActiveTab] = useState<'prefs' | 'highlights' | 'profiles' | 'admin'>('profiles')
   const [defaultsDraft, setDefaultsDraft] = useState<HighlightingRule[]>([])
   const [profilesDraft, setProfilesDraft] = useState<ProfileDto[]>([])
   const [themeDraft, setThemeDraft] = useState<'dark' | 'light'>(theme)
   const [fontFamilyDraft, setFontFamilyDraft] = useState<UserFontFamily>(fontFamily)
   const [fontSizeDraft, setFontSizeDraft] = useState<number>(fontSize)
+  const [showLineWatchdogPanelDraft, setShowLineWatchdogPanelDraft] = useState<boolean>(showLineWatchdogPanel)
   const [selectedProfileIndex, setSelectedProfileIndex] = useState<number | null>(null)
   const [selectedStoredFilterIndex, setSelectedStoredFilterIndex] = useState<number | null>(null)
   const [activeProfileTab, setActiveProfileTab] = useState<'highlight' | 'hidden' | 'stored'>('highlight')
@@ -381,6 +382,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
       setTheme(themeDraft)
       setFontFamily(fontFamilyDraft)
       setFontSize(fontSizeDraft)
+      setShowLineWatchdogPanel(showLineWatchdogPanelDraft)
       setPreferences(saved)
       setDefaultsDraft(saved.defaultHighlights ?? [])
       setProfilesDraft(saved.profiles ?? [])
@@ -413,6 +415,7 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
           <button className={`settings-tab-btn ${activeTab === 'profiles' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('profiles')}>Profiles</button>
           <button className={`settings-tab-btn ${activeTab === 'highlights' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('highlights')}>Default highlights</button>
           <button className={`settings-tab-btn ${activeTab === 'prefs' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('prefs')}>User preferences</button>
+          <button className={`settings-tab-btn ${activeTab === 'admin' ? 'settings-tab-btn--active' : ''}`} onClick={() => setActiveTab('admin')}>Admin</button>
         </div>
 
         <div className="settings-tab-content">
@@ -439,6 +442,23 @@ export function PreferencesScreen({ onClose }: PreferencesScreenProps) {
 
           {activeTab === 'highlights' && (
             <HighlightListEditor title="Default highlights" rules={defaultsDraft} onChange={setDefaultsDraft} />
+          )}
+
+          {activeTab === 'admin' && (
+            <section className="settings-card">
+              <label className="settings-inline-check">
+                <input
+                  type="checkbox"
+                  checked={showLineWatchdogPanelDraft}
+                  onChange={e => setShowLineWatchdogPanelDraft(e.target.checked)}
+                />
+                Show Line Watchdog panel
+              </label>
+              <p className="control-label">
+                Displays the diagnostic Line Watchdog panel in the inspector rail (missing/stalled line
+                detection). This only affects your own browser — other users are not impacted.
+              </p>
+            </section>
           )}
 
           {activeTab === 'profiles' && (

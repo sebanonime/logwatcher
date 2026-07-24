@@ -49,6 +49,12 @@ if (grpcPort > 0 && grpcInsecure)
 
         // Dedicated HTTP/2 cleartext endpoint for gRPC agents
         kestrel.ListenAnyIP(grpcPort, o => o.Protocols = HttpProtocols.Http2);
+
+        // HTTP/2 keepalive: without this, a long-lived, mostly-idle duplex stream between a
+        // remote agent and this backend can be silently dropped by NAT/firewalls on a real
+        // network (works fine over loopback, which is why this can be invisible in local testing).
+        kestrel.Limits.Http2.KeepAlivePingDelay = TimeSpan.FromSeconds(30);
+        kestrel.Limits.Http2.KeepAlivePingTimeout = TimeSpan.FromSeconds(20);
     });
 }
 

@@ -12,6 +12,10 @@ namespace LogWatcher.Web.Services
     /// </summary>
     public class AgentGrpcService : AgentGateway.AgentGatewayBase
     {
+        // Diagnostics for the agent gRPC push path (see WatchSession's "TailDiag" logger for the
+        // SMB tail path). Isolated to logs/tail-diag-*.log via nlog.config (logger name="TailDiag").
+        private static readonly NLog.Logger _diag = NLog.LogManager.GetLogger("TailDiag");
+
         private readonly IAgentRegistry _registry;
         private readonly WatchSessionManager _sessions;
         private readonly KnownAgentsRepository _knownAgents;
@@ -64,14 +68,22 @@ namespace LogWatcher.Web.Services
                             _knownAgents.Upsert(agentId, agentMsg.Register.Hostname);
                             _sessions.OnAgentReconnected(agentId);
                             _log.LogInformation("Agent registered: {AgentId} ({Hostname})", agentId, agentMsg.Register.Hostname);
+                            _diag.Info("Agent registered agentId={0} hostname={1} capabilities={2}", agentId, agentMsg.Register.Hostname, string.Join(",", agentMsg.Register.Capabilities));
                             break;
 
                         case AgentMessage.PayloadOneofCase.PushLines:
                             var pl = agentMsg.PushLines;
+                            var plLines = pl.Lines.ToArray();
+                            var plOffsets = pl.Offsets.ToArray();
+                            _diag.Debug(
+                                "PushLines received agentId={0} session={1} count={2} isInitialLoad={3} isReset={4} firstOffset={5} lastOffset={6}",
+                                agentId, pl.SessionId, plLines.Length, pl.IsInitialLoad, pl.IsReset,
+                                plOffsets.Length > 0 ? plOffsets[0] : -1,
+                                plOffsets.Length > 0 ? plOffsets[^1] : -1);
                             await _sessions.HandleAgentPushAsync(
                                 pl.SessionId,
-                                pl.Lines.ToArray(),
-                                pl.Offsets.ToArray(),
+                                plLines,
+                                plOffsets,
                                 pl.IsInitialLoad,
                                 pl.IsReset);
                             break;
@@ -120,6 +132,7 @@ namespace LogWatcher.Web.Services
             catch (Exception ex)
             {
                 _log.LogError(ex, "AgentGrpcService.Connect error for agent {AgentId}", agentId);
+                _diag.Warn("Connect stream error agentId={0} error={1}", agentId, ex.Message);
             }
             finally
             {
@@ -128,6 +141,7 @@ namespace LogWatcher.Web.Services
                 {
                     _registry.Unregister(agentId);
                     _log.LogInformation("Agent disconnected: {AgentId}", agentId);
+                    _diag.Info("Agent disconnected agentId={0}", agentId);
                 }
                 try { await writeTask; } catch { }
             }

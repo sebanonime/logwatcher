@@ -2,6 +2,8 @@ using Grpc.Core;
 using Grpc.Net.Client;
 using LogWatcher.Grpc;
 using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Security;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -38,15 +40,37 @@ public class AgentGrpcClient : IAsyncDisposable
         string backendUrl = _config["Agent:BackendGrpcUrl"] ?? "https://localhost";
         int port = _config.GetValue<int>("Agent:BackendGrpcPort", 5005);
         string token = _config["Agent:Token"] ?? throw new InvalidOperationException("Agent:Token not configured.");
+        string agentId = _config["Agent:AgentId"] ?? Environment.MachineName;
 
         var uri = new UriBuilder(backendUrl) { Port = port }.Uri;
         bool insecure = uri.Scheme == Uri.UriSchemeHttp;
+
+        // Diagnostics: this is logged BEFORE attempting the connection so a misconfigured
+        // BackendGrpcUrl (e.g. left at the default "http://localhost" when the agent runs on a
+        // remote server) is immediately visible in the agent's own log, instead of only showing
+        // up indirectly as "no lines displayed" on the frontend.
+        _log.LogInformation(
+            "Connecting to backend gRPC at {Uri} as AgentId={AgentId} (insecure={Insecure})",
+            uri, agentId, insecure);
+
+        // HTTP/2 keepalive: without this, a long-lived, mostly-idle duplex stream (agent → backend)
+        // can be silently dropped by NAT/firewalls on a real network even though it works fine over
+        // loopback. SocketsHttpHandler is used (instead of plain HttpClientHandler) specifically so
+        // KeepAlivePingDelay/Timeout are available on both the insecure and TLS branches.
+        var socketsHandler = new SocketsHttpHandler
+        {
+            PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+            KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(20),
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
+            EnableMultipleHttp2Connections = true,
+        };
 
         GrpcChannelOptions channelOptions;
         if (insecure)
         {
             // HTTP/2 cleartext — inject token via HttpClient default header
-            var httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan, DefaultRequestHeaders = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token) } };
+            var httpClient = new HttpClient(socketsHandler) { Timeout = Timeout.InfiniteTimeSpan, DefaultRequestHeaders = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token) } };
             channelOptions = new GrpcChannelOptions
             {
                 HttpClient = httpClient,
@@ -55,13 +79,13 @@ public class AgentGrpcClient : IAsyncDisposable
         }
         else
         {
-            var handler = new HttpClientHandler
+            socketsHandler.SslOptions = new SslClientAuthenticationOptions
             {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                RemoteCertificateValidationCallback = (_, _, _, _) => true,
             };
             channelOptions = new GrpcChannelOptions
             {
-                HttpHandler = handler,
+                HttpHandler = socketsHandler,
                 Credentials = ChannelCredentials.Create(
                     new SslCredentials(),
                     CallCredentials.FromInterceptor((context, metadata) =>
@@ -78,7 +102,6 @@ public class AgentGrpcClient : IAsyncDisposable
         _call = client.Connect(cancellationToken: ct);
 
         // Register with backend
-        string agentId = _config["Agent:AgentId"] ?? Environment.MachineName;
         await SendAsync(new AgentMessage
         {
             Register = new RegisterMsg
@@ -126,7 +149,17 @@ public class AgentGrpcClient : IAsyncDisposable
 
     private void OnWatchFile(WatchFileCmd cmd)
     {
-        _log.LogInformation("WatchFile: {SessionId} → {Path}", cmd.SessionId, cmd.FilePath);
+        // Diagnostics: confirm (a) the command was actually received by this agent, and (b) whether
+        // the requested path even exists as seen by THIS process — useful when the frontend browsed
+        // a path via one code path (ListFiles) and watching fails via another (WatchFile), since a
+        // path/drive/permission mismatch would show up here first.
+        bool exists = File.Exists(cmd.FilePath);
+        _log.LogInformation(
+            "WatchFile: session={SessionId} path={Path} fromOffset={FromOffset} existsOnAgent={Exists}",
+            cmd.SessionId, cmd.FilePath, cmd.FromOffset, exists);
+        if (!exists)
+            _log.LogWarning("WatchFile: path {Path} not found on this agent's filesystem for session {SessionId}.", cmd.FilePath, cmd.SessionId);
+
         if (_watchers.TryRemove(cmd.SessionId, out var old))
             old.Dispose();
 
@@ -144,7 +177,20 @@ public class AgentGrpcClient : IAsyncDisposable
             };
             msg.PushLines.Lines.AddRange(lines);
             msg.PushLines.Offsets.AddRange(offsets);
-            await SendAsync(msg, CancellationToken.None);
+            try
+            {
+                await SendAsync(msg, CancellationToken.None);
+                _log.LogDebug(
+                    "PushLines sent: session={SessionId} count={Count} isInitial={IsInitial} isReset={IsReset}",
+                    sid, lines.Length, isInitial, isReset);
+            }
+            catch (Exception ex)
+            {
+                // Most likely cause: the gRPC stream to the backend dropped (network hiccup, NAT
+                // idle-timeout, backend restart) — lines were read locally but never reached the
+                // backend, which is exactly the "no lines displayed" symptom on the frontend.
+                _log.LogError(ex, "Failed to push {Count} line(s) to backend for session={SessionId} — connection to backend may be down.", lines.Length, sid);
+            }
         };
 
         _watchers[cmd.SessionId] = watcher;
