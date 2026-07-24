@@ -30,4 +30,8 @@
     <Compile Remove="SortableBindingList.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" Version="0.48.*" />
+  </ItemGroup>
+
 </Project>

@@ -107,6 +107,7 @@ namespace LogWatcher.Web.Services
                                 SizeBytes = f.SizeBytes,
                                 LastModified = DateTimeOffset.TryParse(f.LastModified, out var dt) ? dt : DateTimeOffset.UtcNow,
                                 HasChildren = f.HasChildren,
+                                IsArchive = f.IsArchive,
                             }).ToArray();
                             await _registry.CompleteListRequestAsync(pfl.RequestId, files);
                             break;

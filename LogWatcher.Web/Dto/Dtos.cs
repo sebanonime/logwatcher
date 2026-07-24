@@ -71,6 +71,8 @@ namespace LogWatcher.Web.Dto
         public string ServerId { get; set; }
         /// <summary>For directories: true if the directory contains at least one child entry.</summary>
         public bool HasChildren { get; set; }
+        /// <summary>True if this is a .zip/.7z archive file that can be browsed into.</summary>
+        public bool IsArchive { get; set; }
         /// <summary>Human-readable name of the server/source this item comes from.</summary>
         public string SourceName { get; set; }
     }

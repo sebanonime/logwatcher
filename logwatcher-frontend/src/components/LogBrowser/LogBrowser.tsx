@@ -62,8 +62,10 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   const {
     selectedRootFolder, subfolders, rootFiles, rootFilesFolderPath, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
+    archiveBreadcrumb, archiveEntries, isLoadingArchive,
     contentFilter, contentFilterIsRegex, isSearchingContent, searchProgress, contentSearchResults,
-    loadRoot, loadSubfolder, refreshFiles, setSubfoldersFilter, setFilesFilter,
+    loadRoot, loadSubfolder, refreshFiles, enterArchive, enterArchiveFolder, goToArchiveBreadcrumb, exitArchive,
+    setSubfoldersFilter, setFilesFilter,
     setContentFilter, setContentFilterIsRegex, searchContent, clearContentSearch, clearSearchResults,
   } = useBrowserStore()
 
@@ -97,6 +99,16 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     const subpath = item.path
     loadSubfolder(selectedPerimeterId, selectedRootFolder, subpath)
   }, [selectedPerimeterId, selectedRootFolder, loadSubfolder])
+
+  const handleEnterArchiveFolder = useCallback((folder: RemoteFileInfoDto) => {
+    if (!selectedPerimeterId || !selectedRootFolder) return
+    enterArchiveFolder(selectedPerimeterId, selectedRootFolder, folder)
+  }, [selectedPerimeterId, selectedRootFolder, enterArchiveFolder])
+
+  const handleArchiveBreadcrumbClick = useCallback((index: number) => {
+    if (!selectedPerimeterId || !selectedRootFolder) return
+    goToArchiveBreadcrumb(selectedPerimeterId, selectedRootFolder, index)
+  }, [selectedPerimeterId, selectedRootFolder, goToArchiveBreadcrumb])
 
   const handleOpenFile = useCallback(async (file: RemoteFileInfoDto) => {
     if (!selectedPerimeterId || !selectedRootFolder) return
@@ -150,6 +162,12 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
       console.error('Failed to open log session', e)
     }
   }, [selectedPerimeterId, selectedRootFolder, perimeters, profiles, tabs, addTab, removeTab, setActive])
+
+  const handleEnterArchive = useCallback(async (file: RemoteFileInfoDto) => {
+    if (!selectedPerimeterId || !selectedRootFolder) return
+    const onlyFile = await enterArchive(selectedPerimeterId, selectedRootFolder, file)
+    if (onlyFile) handleOpenFile(onlyFile)
+  }, [selectedPerimeterId, selectedRootFolder, enterArchive, handleOpenFile])
 
   const handleSearchAndClose = useCallback(() => {
     if (!selectedPerimeterId || !selectedRootFolder) return
@@ -371,26 +389,63 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                 </div>
               </div>
 
+              {archiveBreadcrumb.length > 0 && (
+                <div className="browser-archive-breadcrumb">
+                  <button className="browser-archive-crumb" onClick={exitArchive} title="Exit archive">⤺ Files</button>
+                  {archiveBreadcrumb.map((crumb, i) => (
+                    <span key={crumb.path}>
+                      <span className="browser-archive-sep">/</span>
+                      <button className="browser-archive-crumb" onClick={() => handleArchiveBreadcrumbClick(i)}>{crumb.label}</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="browser-file-list browser-file-list--uniform">
-                {isLoadingFiles && (
-                  <div className="empty-state compact-empty-state browser-empty-state">Loading files…</div>
+                {archiveBreadcrumb.length > 0 ? (
+                  <>
+                    {isLoadingArchive && (
+                      <div className="empty-state compact-empty-state browser-empty-state">Loading archive…</div>
+                    )}
+                    {archiveEntries.map(f => {
+                      const name = basename(f.path)
+                      const modTime = formatTime(f.lastModified)
+                      return (
+                        <button
+                          key={f.path}
+                          onDoubleClick={() => f.isDirectory ? handleEnterArchiveFolder(f) : handleOpenFile(f)}
+                          className="browser-file-row browser-file-row--uniform"
+                          title={`Double-click to ${f.isDirectory ? 'open folder' : 'open file'}:\n${f.path}`}
+                        >
+                          <span className="browser-item-title">{f.isDirectory ? '📁 ' : ''}{name}</span>
+                          {!f.isDirectory && modTime && <span className="browser-file-time">{modTime}</span>}
+                        </button>
+                      )
+                    })}
+                  </>
+                ) : (
+                  <>
+                    {isLoadingFiles && (
+                      <div className="empty-state compact-empty-state browser-empty-state">Loading files…</div>
+                    )}
+                    {displayedFiles.map(f => {
+                      const name = basename(f.path)
+                      const rolled = isRolledFile(f.path)
+                      const modTime = formatTime(f.lastModified)
+                      return (
+                        <button
+                          key={f.path}
+                          onDoubleClick={() => f.isArchive ? handleEnterArchive(f) : handleOpenFile(f)}
+                          className={`browser-file-row browser-file-row--uniform ${rolled ? 'browser-file-row--rolled' : ''}`}
+                          title={`Double-click to open:\n${f.path}`}
+                        >
+                          <span className="browser-item-title">{f.isArchive ? '🗜 ' : ''}{name}</span>
+                          {modTime && <span className="browser-file-time">{modTime}</span>}
+                        </button>
+                      )
+                    })}
+                  </>
                 )}
-                {displayedFiles.map(f => {
-                  const name = basename(f.path)
-                  const rolled = isRolledFile(f.path)
-                  const modTime = formatTime(f.lastModified)
-                  return (
-                    <button
-                      key={f.path}
-                      onDoubleClick={() => handleOpenFile(f)}
-                      className={`browser-file-row browser-file-row--uniform ${rolled ? 'browser-file-row--rolled' : ''}`}
-                      title={`Double-click to open:\n${f.path}`}
-                    >
-                      <span className="browser-item-title">{name}</span>
-                      {modTime && <span className="browser-file-time">{modTime}</span>}
-                    </button>
-                  )
-                })}
               </div>
               <div className="browser-files-footer">
                 <label className="settings-inline-check">

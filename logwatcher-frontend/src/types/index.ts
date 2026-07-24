@@ -45,6 +45,7 @@ export interface ServerDto {
   host?: string
   agentId?: string
   username?: string
+  showArchives?: boolean
   agentOnline?: boolean
 }
 
@@ -91,6 +92,7 @@ export interface RemoteFileInfoDto {
   isDirectory: boolean
   serverId: string
   hasChildren?: boolean
+  isArchive?: boolean
   sourceName?: string
 }
 

@@ -21,7 +21,7 @@ interface LogBrowserSettingsScreenProps {
 }
 
 function emptyServer(): ServerDto {
-  return { id: '', name: '', type: 'smb', host: '', agentId: '', username: '' }
+  return { id: '', name: '', type: 'smb', host: '', agentId: '', username: '', showArchives: false }
 }
 
 function StatusDot({ status }: { status: 'online' | 'offline' | 'unknown' }) {
@@ -385,6 +385,15 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
                   </label>
                 </>
               )}
+
+              <label className="settings-inline-check">
+                <input
+                  type="checkbox"
+                  checked={serverDraft.showArchives ?? false}
+                  onChange={event => setServerDraft({ ...serverDraft, showArchives: event.target.checked })}
+                />
+                Show zip/7z archive files
+              </label>
             </div>
             <div className="settings-actions-row">
               <button className="control-button control-button--primary" onClick={savePath} disabled={isSaving || !selectedPerimeterId || !selectedRootName || !serverDraft.name.trim()}>Save</button>

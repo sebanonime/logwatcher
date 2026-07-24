@@ -1,3 +1,4 @@
+using LogWatcher.Common;
 using LogWatcher.Web.Config;
 using LogWatcher.Web.Dto;
 using System.Runtime.CompilerServices;
@@ -24,8 +25,22 @@ namespace LogWatcher.Web.Sources
             _credentials = credentials;
         }
 
+        /// <summary>
+        /// Resolves an archive-entry composite path ("archive.zip::internal/entry.log") to a real,
+        /// locally readable file path by extracting the entry to a cached temp file. Non-archive paths
+        /// are returned unchanged, so every existing byte-offset based read/tail method below needs no
+        /// further archive-awareness.
+        /// </summary>
+        private static string ResolvePath(string path)
+        {
+            if (ArchivePathHelper.TryParse(path, out var archivePath, out var internalPath) && !string.IsNullOrEmpty(internalPath))
+                return ArchiveEntryCache.Resolve(archivePath, internalPath);
+            return path;
+        }
+
         public Task<FileSourceInfo> GetFileInfoAsync(string path, CancellationToken ct = default)
         {
+            path = ResolvePath(path);
             var fi = new FileInfo(path);
             fi.Refresh();
             return Task.FromResult(new FileSourceInfo(
@@ -39,6 +54,7 @@ namespace LogWatcher.Web.Sources
             string path, long fromByteOffset,
             [EnumeratorCancellation] CancellationToken ct)
         {
+            path = ResolvePath(path);
             using var fs = OpenReadStream(path);
             fs.Position = fromByteOffset;
             var buffer = new byte[BufferSize];
@@ -51,6 +67,7 @@ namespace LogWatcher.Web.Sources
 
         public async Task<byte[]> ReadBytesAsync(string path, long from, int count, CancellationToken ct)
         {
+            path = ResolvePath(path);
             using var fs = OpenReadStream(path);
             fs.Position = from;
             var buffer = new byte[count];
@@ -68,6 +85,7 @@ namespace LogWatcher.Web.Sources
 
         public async Task<byte[]> ReadRangeBytesAsync(string path, long from, long to, CancellationToken ct)
         {
+            path = ResolvePath(path);
             long length = to - from;
             if (length <= 0) return Array.Empty<byte>();
             // Cap single read at 16 MB to avoid OOM on absurdly large ranges
@@ -89,6 +107,7 @@ namespace LogWatcher.Web.Sources
 
         public async IAsyncEnumerable<TailChunk> TailAsync(string path, long fromByteOffset, [EnumeratorCancellation] CancellationToken ct)
         {
+            path = ResolvePath(path);
             long position = fromByteOffset;
             long previousSize = fromByteOffset;
 
@@ -179,6 +198,20 @@ namespace LogWatcher.Web.Sources
         public Task<IEnumerable<RemoteFileInfoDto>> ListFilesAsync(
             string directory, string pattern, CancellationToken ct = default)
         {
+            if (ArchivePathHelper.TryParse(directory, out var archivePath, out var internalDir))
+            {
+                var entries = ArchiveEntryCache.ListEntries(archivePath, internalDir)
+                    .Select(e => new RemoteFileInfoDto
+                    {
+                        Path = ArchivePathHelper.Combine(archivePath, string.IsNullOrEmpty(internalDir) ? e.Name : internalDir + "/" + e.Name),
+                        IsDirectory = e.IsDirectory,
+                        SizeBytes = e.SizeBytes,
+                        LastModified = e.LastModified,
+                        HasChildren = e.IsDirectory,
+                    });
+                return Task.FromResult((IEnumerable<RemoteFileInfoDto>)entries.ToList());
+            }
+
             var dir = new DirectoryInfo(directory);
             if (!dir.Exists)
                 return Task.FromResult(Enumerable.Empty<RemoteFileInfoDto>());
@@ -188,9 +221,10 @@ namespace LogWatcher.Web.Sources
                 {
                     Path = f.FullName,
                     IsDirectory = f is DirectoryInfo,
+                    IsArchive = f is FileInfo && ArchivePathHelper.IsArchiveFile(f.FullName),
                     SizeBytes = f is FileInfo fi ? fi.Length : 0,
                     LastModified = f.LastWriteTimeUtc,
-                    HasChildren = f is DirectoryInfo d && d.EnumerateFileSystemInfos().Any()
+                    HasChildren = f is DirectoryInfo d ? d.EnumerateFileSystemInfos().Any() : ArchivePathHelper.IsArchiveFile(f.FullName)
                 });
 
             return Task.FromResult(files);

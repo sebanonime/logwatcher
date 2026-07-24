@@ -100,6 +100,8 @@ namespace LogWatcher.Web.Hubs
                         item.ServerId = server.Id;
                         item.SourceName = server.Name;
                     }
+                    if (!server.ShowArchives)
+                        items = items.Where(i => !i.IsArchive).ToList();
                     results.AddRange(items);
                 }
                 catch { /* skip unreachable servers */ }

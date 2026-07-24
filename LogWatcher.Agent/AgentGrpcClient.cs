@@ -1,5 +1,6 @@
 using Grpc.Core;
 using Grpc.Net.Client;
+using LogWatcher.Common;
 using LogWatcher.Grpc;
 using System.Collections.Concurrent;
 using System.Net;
@@ -153,17 +154,31 @@ public class AgentGrpcClient : IAsyncDisposable
         // the requested path even exists as seen by THIS process — useful when the frontend browsed
         // a path via one code path (ListFiles) and watching fails via another (WatchFile), since a
         // path/drive/permission mismatch would show up here first.
-        bool exists = File.Exists(cmd.FilePath);
+        string resolvedPath = cmd.FilePath;
+        try
+        {
+            if (ArchivePathHelper.TryParse(cmd.FilePath, out var archivePath, out var internalPath) && !string.IsNullOrEmpty(internalPath))
+            {
+                resolvedPath = ArchiveEntryCache.Resolve(archivePath, internalPath);
+                _log.LogInformation("WatchFile: resolved archive entry {Original} -> {Resolved}", cmd.FilePath, resolvedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "WatchFile: failed to extract archive entry for {Path}", cmd.FilePath);
+        }
+
+        bool exists = File.Exists(resolvedPath);
         _log.LogInformation(
             "WatchFile: session={SessionId} path={Path} fromOffset={FromOffset} existsOnAgent={Exists}",
-            cmd.SessionId, cmd.FilePath, cmd.FromOffset, exists);
+            cmd.SessionId, resolvedPath, cmd.FromOffset, exists);
         if (!exists)
-            _log.LogWarning("WatchFile: path {Path} not found on this agent's filesystem for session {SessionId}.", cmd.FilePath, cmd.SessionId);
+            _log.LogWarning("WatchFile: path {Path} not found on this agent's filesystem for session {SessionId}.", resolvedPath, cmd.SessionId);
 
         if (_watchers.TryRemove(cmd.SessionId, out var old))
             old.Dispose();
 
-        var watcher = new AgentFileWatcher(cmd.SessionId, cmd.FilePath, cmd.FromOffset, cmd.Encoding, _lineIndex, _log);
+        var watcher = new AgentFileWatcher(cmd.SessionId, resolvedPath, cmd.FromOffset, cmd.Encoding, _lineIndex, _log);
         watcher.LinesReady += async (sid, lines, offsets, isInitial, isReset) =>
         {
             var msg = new AgentMessage
@@ -236,18 +251,36 @@ public class AgentGrpcClient : IAsyncDisposable
         {
             _log.LogInformation("ListFiles: {Dir}", cmd.Directory);
             var result = new PushFileListMsg { RequestId = cmd.RequestId };
-            if (Directory.Exists(cmd.Directory))
+
+            if (ArchivePathHelper.TryParse(cmd.Directory, out var archivePath, out var internalDir))
+            {
+                foreach (var entry in ArchiveEntryCache.ListEntries(archivePath, internalDir))
+                {
+                    var entryPath = ArchivePathHelper.Combine(archivePath, string.IsNullOrEmpty(internalDir) ? entry.Name : internalDir + "/" + entry.Name);
+                    result.Files.Add(new FileEntry
+                    {
+                        Path = entryPath,
+                        IsDirectory = entry.IsDirectory,
+                        SizeBytes = entry.SizeBytes,
+                        LastModified = entry.LastModified.ToString("o"),
+                        HasChildren = entry.IsDirectory,
+                    });
+                }
+            }
+            else if (Directory.Exists(cmd.Directory))
             {
                 foreach (var f in Directory.GetFiles(cmd.Directory))
                 {
                     var fi = new FileInfo(f);
+                    bool isArchive = ArchivePathHelper.IsArchiveFile(f);
                     result.Files.Add(new FileEntry
                     {
                         Path = f,
                         IsDirectory = false,
                         SizeBytes = fi.Length,
                         LastModified = fi.LastWriteTimeUtc.ToString("o"),
-                        HasChildren = false,
+                        HasChildren = isArchive,
+                        IsArchive = isArchive,
                     });
                 }
                 foreach (var d in Directory.GetDirectories(cmd.Directory))

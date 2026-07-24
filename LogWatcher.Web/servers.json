@@ -13,7 +13,8 @@
             "Type": "smb",
             "Host": "C:\\TestLog\\TestLogFile",
             "AgentId": "",
-            "Username": ""
+            "Username": "",
+            "ShowArchives": false
           }
         ]
       },
@@ -27,7 +28,8 @@
             "Type": "smb",
             "Host": "C:\\TestLog\\TestLog1",
             "AgentId": null,
-            "Username": null
+            "Username": null,
+            "ShowArchives": false
           },
           {
             "Id": "local",
@@ -35,7 +37,8 @@
             "Type": "smb",
             "Host": "C:\\TestLog\\TestLog2",
             "AgentId": null,
-            "Username": null
+            "Username": null,
+            "ShowArchives": true
           },
           {
             "Id": "dcf058f5",
@@ -43,32 +46,35 @@
             "Type": "agent",
             "Host": "C:\\TestLog\\AgentFolder",
             "AgentId": "agent-01",
-            "Username": ""
+            "Username": "",
+            "ShowArchives": false
           }
         ]
-      },	  
+      },
       {
-          "Name": "NASEB",
-          "EnvironmentColor": null,
-          "Servers": [
-            {
-              "Id": "local1",
-              "Name": "Local 1",
-              "Type": "smb",
-              "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog1",
-              "AgentId": null,
-              "Username": null
-            },
-            {
-              "Id": "local",
-              "Name": "Local 2",
-              "Type": "smb",
-              "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog2",
-              "AgentId": null,
-              "Username": null
-            }
-          ]
-        }
+        "Name": "NASEB",
+        "EnvironmentColor": null,
+        "Servers": [
+          {
+            "Id": "local1",
+            "Name": "Local 1",
+            "Type": "smb",
+            "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog1",
+            "AgentId": null,
+            "Username": null,
+            "ShowArchives": false
+          },
+          {
+            "Id": "local",
+            "Name": "Local 2",
+            "Type": "smb",
+            "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog2",
+            "AgentId": null,
+            "Username": null,
+            "ShowArchives": false
+          }
+        ]
+      }
     ]
   }
 ]

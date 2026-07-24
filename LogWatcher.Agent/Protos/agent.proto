@@ -57,6 +57,7 @@ message FileEntry {
   int64  size_bytes    = 3;
   string last_modified = 4;
   bool   has_children  = 5;
+  bool   is_archive    = 6;
 }
 
 message PushFileListMsg {

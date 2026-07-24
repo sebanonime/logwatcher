@@ -41,6 +41,7 @@ namespace LogWatcher.Web.Controllers
                         s.Host,
                         s.AgentId,
                         s.Username,
+                        s.ShowArchives,
                         AgentOnline = s.Type == "agent" && agents.Any(a => a.AgentId == s.AgentId)
                     })
                 })
