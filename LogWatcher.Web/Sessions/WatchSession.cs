@@ -103,7 +103,16 @@ namespace LogWatcher.Web.Sessions
                 _isIndexComplete = true;
 
                 // 3. Notify the client that the index is ready
-                int visibleCount = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+                // Agent sources never populate the index here (ReadRawAsync is a no-op for them), so
+                // _index.Count is only the phantom line-0 seed BuildAsync always adds — not real
+                // content. Reporting it as-is would make the frontend immediately request that "line"
+                // via GetLines/ServePageAsync, which asks the agent for a page before WatchFile (sent
+                // below by TailAsync) has even registered a watcher — hanging until the request
+                // timeout. Report 0 instead; the real count/content arrives via HandleAgentPushAsync
+                // once the agent responds to WatchFile.
+                int visibleCount = _provider.SourceType == "agent"
+                    ? 0
+                    : (_filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count);
                 Console.WriteLine($"[WatchSession.RunAsync] Sending OnFileStats: TotalLines={visibleCount}, TotalBytes={_index.TotalBytes}");
                 await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                     new FileStatsDto
@@ -134,6 +143,7 @@ namespace LogWatcher.Web.Sessions
                 {
                     try
                     {
+                        _diag.Info("Sending WatchFile to agent file={0} session={1} fromOffset={2}", FilePath, SessionId, currentTailOffset);
                         var tailStream = _provider.TailAsync(FilePath, currentTailOffset, ct);
 
                         await foreach (var chunk in tailStream.WithCancellation(ct))
@@ -268,9 +278,13 @@ namespace LogWatcher.Web.Sessions
                     }
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
             catch (Exception ex)
             {
+                // Includes OperationCanceledException NOT caused by our own ct (e.g. an internal
+                // agent request timeout) — those used to be swallowed by the branch above, aborting
+                // the session before TailAsync/WatchFile was ever sent, with zero trace anywhere.
+                _diag.Error(ex, "RunAsync failed for file={0} session={1}", FilePath, SessionId);
                 await SendToGroupAndOpeningClientAsync("OnError", SessionId, ex.Message);
             }
         }
@@ -315,7 +329,12 @@ namespace LogWatcher.Web.Sessions
             var reloadStream = _provider.ReadRawAsync(FilePath, 0, ct);
             await _builder.BuildAsync(_index, reloadStream, null, ct);
             
-            int visibleCount = _filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count;
+            // Same reasoning as RunAsync: for agent sources this rebuilt index is only the phantom
+            // line-0 seed (ReadRawAsync is a no-op), not real content — report 0 so the frontend
+            // doesn't request it via GetLines before WatchFile has re-registered a watcher.
+            int visibleCount = _provider.SourceType == "agent"
+                ? 0
+                : (_filterEnabled ? (Volatile.Read(ref _filter)?.Count ?? _index.Count) : _index.Count);
             
             await SendToGroupAndOpeningClientAsync("OnFileStats", SessionId,
                 new FileStatsDto
@@ -328,7 +347,9 @@ namespace LogWatcher.Web.Sessions
                     ViewVersion = ViewVersion
                 });
 
-            if (visibleCount > 0)
+            // See the matching guard in RunAsync: agent sources must not fetch a page before the
+            // agent has a registered watcher for this session.
+            if (visibleCount > 0 && _provider.SourceType != "agent")
             {
                 int initialFrom = Math.Max(0, visibleCount - 500);
                 int initialCount = visibleCount - initialFrom;

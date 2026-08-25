@@ -29,6 +29,9 @@ public class AgentGrpcClient : IAsyncDisposable
     // Writer lock: WriteAsync is not thread-safe
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
+    // Must match (or stay below) the backend's AddGrpc() MaxReceiveMessageSize in Program.cs.
+    private const int MaxGrpcMessageSize = 32 * 1024 * 1024;
+
     public AgentGrpcClient(IConfiguration config, AgentLineIndex lineIndex, ILogger<AgentGrpcClient> log)
     {
         _config = config;
@@ -76,6 +79,8 @@ public class AgentGrpcClient : IAsyncDisposable
             {
                 HttpClient = httpClient,
                 Credentials = ChannelCredentials.Insecure,
+                MaxReceiveMessageSize = MaxGrpcMessageSize,
+                MaxSendMessageSize = MaxGrpcMessageSize,
             };
         }
         else
@@ -93,7 +98,9 @@ public class AgentGrpcClient : IAsyncDisposable
                     {
                         metadata.Add("authorization", $"Bearer {token}");
                         return Task.CompletedTask;
-                    }))
+                    })),
+                MaxReceiveMessageSize = MaxGrpcMessageSize,
+                MaxSendMessageSize = MaxGrpcMessageSize,
             };
         }
 
@@ -195,9 +202,14 @@ public class AgentGrpcClient : IAsyncDisposable
             try
             {
                 await SendAsync(msg, CancellationToken.None);
-                _log.LogDebug(
-                    "PushLines sent: session={SessionId} count={Count} isInitial={IsInitial} isReset={IsReset}",
-                    sid, lines.Length, isInitial, isReset);
+                if (isInitial)
+                    _log.LogInformation(
+                        "WatchFile: session={SessionId} initial PushLines sent to backend — count={Count}",
+                        sid, lines.Length);
+                else
+                    _log.LogDebug(
+                        "PushLines sent: session={SessionId} count={Count} isInitial={IsInitial} isReset={IsReset}",
+                        sid, lines.Length, isInitial, isReset);
             }
             catch (Exception ex)
             {
@@ -311,7 +323,13 @@ public class AgentGrpcClient : IAsyncDisposable
         try
         {
             var filePath = _lineIndex.GetFilePath(cmd.SessionId);
-            if (filePath == null) return;
+            if (filePath == null)
+            {
+                // Backend asked for a page before (or after) this agent had a registered watcher for
+                // the session — e.g. it raced ahead of WatchFile, or the session was already closed.
+                _log.LogWarning("RequestLines: session={SessionId} has no registered watcher on this agent — ignoring.", cmd.SessionId);
+                return;
+            }
             var lines = _lineIndex.ReadLines(cmd.SessionId, filePath, cmd.StartLine, cmd.Count);
             var msg = new AgentMessage
             {

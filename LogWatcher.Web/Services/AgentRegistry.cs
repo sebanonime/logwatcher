@@ -6,6 +6,9 @@ namespace LogWatcher.Web.Services
 {
     public class AgentRegistry : IAgentRegistry
     {
+        // Shares the "TailDiag" logger/target with WatchSession/WatchSessionManager/AgentGrpcService.
+        private static readonly NLog.Logger _diag = NLog.LogManager.GetLogger("TailDiag");
+
         private record RegisteredAgent(AgentInfo Info, Func<BackendMessage, Task> Sender);
 
         private readonly ConcurrentDictionary<string, RegisteredAgent> _agents = new();
@@ -36,7 +39,25 @@ namespace LogWatcher.Web.Services
         {
             if (_agents.TryGetValue(agentId, out var agent))
                 return agent.Sender(message);
+            // Previously a silent no-op: a message to a disconnected/unknown agent vanished with no
+            // trace anywhere, which looked identical to "the agent is slow" from the caller's side.
+            _diag.Warn("SendAsync: agent={0} is not registered — message {1} dropped.", agentId, message.PayloadCase);
             return Task.CompletedTask;
+        }
+
+        /// <summary>Awaits a pending request's TCS, logging when the wait ends due to our own
+        /// RequestTimeout rather than the caller's cancellation token.</summary>
+        private async Task<T> AwaitResponseAsync<T>(TaskCompletionSource<T> tcs, string kind, string agentId, CancellationToken ct)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(RequestTimeout);
+            cts.Token.Register(() =>
+            {
+                if (!ct.IsCancellationRequested)
+                    _diag.Warn("{0} request to agent={1} timed out after {2}s with no response.", kind, agentId, RequestTimeout.TotalSeconds);
+                tcs.TrySetCanceled();
+            });
+            return await tcs.Task;
         }
 
         // ── File info ──────────────────────────────────────────────────────
@@ -53,10 +74,7 @@ namespace LogWatcher.Web.Services
                 {
                     GetFileInfo = new GetFileInfoCmd { RequestId = requestId, FilePath = filePath }
                 }, ct);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(RequestTimeout);
-                cts.Token.Register(() => tcs.TrySetCanceled());
-                return await tcs.Task;
+                return await AwaitResponseAsync(tcs, "GetFileInfo", agentId, ct);
             }
             finally
             {
@@ -85,10 +103,7 @@ namespace LogWatcher.Web.Services
                 {
                     ListFiles = new ListFilesCmd { RequestId = requestId, Directory = directory, Pattern = pattern }
                 }, ct);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(RequestTimeout);
-                cts.Token.Register(() => tcs.TrySetCanceled());
-                return await tcs.Task;
+                return await AwaitResponseAsync(tcs, "ListFiles", agentId, ct);
             }
             finally
             {
@@ -113,10 +128,7 @@ namespace LogWatcher.Web.Services
             try
             {
                 await SendAsync(agentId, new BackendMessage { BuildFilter = cmd }, ct);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(RequestTimeout);
-                cts.Token.Register(() => tcs.TrySetCanceled());
-                return await tcs.Task;
+                return await AwaitResponseAsync(tcs, "BuildFilter", agentId, ct);
             }
             finally
             {
@@ -143,10 +155,7 @@ namespace LogWatcher.Web.Services
             try
             {
                 await SendAsync(agentId, new BackendMessage { SearchFiles = cmd }, ct);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(RequestTimeout);
-                cts.Token.Register(() => tcs.TrySetCanceled());
-                return await tcs.Task;
+                return await AwaitResponseAsync(tcs, "SearchFiles", agentId, ct);
             }
             finally
             {
@@ -175,10 +184,7 @@ namespace LogWatcher.Web.Services
                 {
                     RequestLines = new RequestLinesCmd { SessionId = sessionId, StartLine = startLine, Count = count }
                 }, ct);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(RequestTimeout);
-                cts.Token.Register(() => tcs.TrySetCanceled());
-                return await tcs.Task;
+                return await AwaitResponseAsync(tcs, "RequestLines", agentId, ct);
             }
             finally
             {

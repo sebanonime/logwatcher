@@ -73,7 +73,14 @@ builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
 builder.Services.AddSingleton<WatchSessionManager>();
 
 // ── gRPC (agent ↔ backend) ────────────────────────────────────────────────
-builder.Services.AddGrpc();
+// Default MaxReceiveMessageSize (4MB) is too small for an agent's initial-load PushLines
+// batch on a large log file (thousands of lines in one message) — raise it well above what
+// a single chunk from AgentFileWatcher can produce.
+builder.Services.AddGrpc(options =>
+{
+    options.MaxReceiveMessageSize = 32 * 1024 * 1024;
+    options.MaxSendMessageSize = 32 * 1024 * 1024;
+});
 
 // ── SignalR (browser ↔ backend) ───────────────────────────────────────────
 builder.Services.AddSignalR(opts =>

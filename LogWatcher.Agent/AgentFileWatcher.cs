@@ -25,6 +25,10 @@ public class AgentFileWatcher : IDisposable
     // Track last known file size to detect rotation/truncation
     private long _lastKnownSize;
 
+    // Cap lines per PushLines message so a large initial load (or a huge burst of new lines)
+    // never approaches the gRPC message-size limit in a single message.
+    private const int MaxLinesPerPush = 2000;
+
     public AgentFileWatcher(string sessionId, string filePath, long fromOffset, string encoding,
         AgentLineIndex lineIndex, ILogger log)
     {
@@ -99,12 +103,20 @@ public class AgentFileWatcher : IDisposable
 
                     if (lines.Length > 0)
                     {
-                        await EmitAsync(lines, offsets, !sentInitial, isReset: false, ct);
+                        bool isInitial = !sentInitial;
+                        await EmitChunkedAsync(lines, offsets, isInitial, ct);
+                        if (isInitial)
+                            _log.LogInformation(
+                                "WatchFile: session={SessionId} path={Path} initial load complete — {LinesRead} line(s), position={Position}",
+                                _sessionId, _filePath, lines.Length, _position);
                         sentInitial = true;
                     }
                     else if (!sentInitial)
                     {
                         // File exists but no lines read yet (e.g. fromOffset == EOF)
+                        _log.LogInformation(
+                            "WatchFile: session={SessionId} path={Path} initial load complete — file has no complete line yet at offset {Position}",
+                            _sessionId, _filePath, _position);
                         sentInitial = true;
                     }
                     else
@@ -121,6 +133,9 @@ public class AgentFileWatcher : IDisposable
                 {
                     // File hasn't grown from initial offset — send empty initial signal
                     await EmitAsync(Array.Empty<string>(), Array.Empty<long>(), true, false, ct);
+                    _log.LogInformation(
+                        "WatchFile: session={SessionId} path={Path} initial load complete — file unchanged at offset {Position}, nothing to send",
+                        _sessionId, _filePath, _position);
                     sentInitial = true;
                     _lastKnownSize = currentSize;
                 }
@@ -220,6 +235,21 @@ public class AgentFileWatcher : IDisposable
     private Task EmitAsync(string[] lines, long[] offsets, bool isInitial, bool isReset, CancellationToken ct)
     {
         return LinesReady?.Invoke(_sessionId, lines, offsets, isInitial, isReset) ?? Task.CompletedTask;
+    }
+
+    private async Task EmitChunkedAsync(string[] lines, long[] offsets, bool isInitial, CancellationToken ct)
+    {
+        if (lines.Length <= MaxLinesPerPush)
+        {
+            await EmitAsync(lines, offsets, isInitial, isReset: false, ct);
+            return;
+        }
+
+        for (int i = 0; i < lines.Length; i += MaxLinesPerPush)
+        {
+            int n = Math.Min(MaxLinesPerPush, lines.Length - i);
+            await EmitAsync(lines[i..(i + n)], offsets[i..(i + n)], isInitial, isReset: false, ct);
+        }
     }
 
     private static Encoding GetEncoding(string encoding)
