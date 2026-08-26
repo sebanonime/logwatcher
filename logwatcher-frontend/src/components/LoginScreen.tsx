@@ -1,10 +1,32 @@
 import React, { useState } from 'react'
+import type { AuthUiDescriptor } from '../api/auth'
 
 interface LoginScreenProps {
   onLogin: (token: string) => void
+  authConfig: AuthUiDescriptor
 }
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
+export function LoginScreen({ onLogin, authConfig }: LoginScreenProps) {
+  if (authConfig.mode === 'redirect') {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 w-80 shadow-xl text-center">
+          <h1 className="text-sm font-bold text-blue-400 mb-4">LogWatcher — Sign in</h1>
+          <a
+            href={authConfig.loginUrl ?? '#'}
+            className="inline-block w-full px-3 py-1.5 text-xs rounded bg-blue-700 text-white hover:bg-blue-600"
+          >
+            Sign in with company SSO
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  return <PasswordLoginForm onLogin={onLogin} />
+}
+
+function PasswordLoginForm({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')

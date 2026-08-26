@@ -3,6 +3,7 @@ using LogWatcher.Grpc;
 using LogWatcher.Web.Config;
 using LogWatcher.Web.Dto;
 using LogWatcher.Web.Sessions;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LogWatcher.Web.Services
 {
@@ -10,6 +11,7 @@ namespace LogWatcher.Web.Services
     /// gRPC endpoint that replaces AgentHub.
     /// Each agent opens one bidirectional stream and keeps it open for the session lifetime.
     /// </summary>
+    [Authorize(Policy = "AgentOnly")]
     public class AgentGrpcService : AgentGateway.AgentGatewayBase
     {
         // Diagnostics for the agent gRPC push path (see WatchSession's "TailDiag" logger for the

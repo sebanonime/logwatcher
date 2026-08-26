@@ -1,3 +1,4 @@
+using LogWatcher.Auth.Abstractions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -10,18 +11,28 @@ namespace LogWatcher.Web.Controllers
     /// <summary>
     /// Issues user JWT tokens for browser clients.
     /// In the JWT provider mode, this is a simple username/password login.
-    /// When a company auth provider is active (Phase 8+), this endpoint is
-    /// replaced by the provider's own flow (e.g. OIDC redirect).
+    /// When a company auth provider is active, the frontend uses GetConfig() to
+    /// discover its login mode instead (e.g. a redirect to the provider's own flow).
     /// </summary>
     [ApiController]
     [Route("api/auth")]
     public class AuthController : ControllerBase
     {
         private readonly IConfiguration _config;
+        private readonly IAuthenticationProvider _authProvider;
 
-        public AuthController(IConfiguration config)
+        public AuthController(IConfiguration config, IAuthenticationProvider authProvider)
         {
             _config = config;
+            _authProvider = authProvider;
+        }
+
+        /// <summary>Tells the frontend how to present login for the currently active provider.</summary>
+        [HttpGet("config")]
+        [AllowAnonymous]
+        public ActionResult<AuthUiDescriptor> GetConfig()
+        {
+            return Ok(_authProvider.GetUiDescriptor(_config));
         }
 
         [HttpPost("login")]

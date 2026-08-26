@@ -1,3 +1,4 @@
+using LogWatcher.Auth.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -72,11 +73,13 @@ namespace LogWatcher.Web.Auth
             });
         }
 
-        public void ConfigurePipeline(IApplicationBuilder app)
+        public void ConfigurePipeline(WebApplication app)
         {
             app.UseAuthentication();
             app.UseAuthorization();
         }
+
+        public AuthUiDescriptor GetUiDescriptor(IConfiguration config) => new("password");
 
         private static TokenValidationParameters BuildParams(string secret) => new()
         {

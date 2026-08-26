@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj" />
+    <ProjectReference Include="..\LogWatcher.Auth.Abstractions\LogWatcher.Auth.Abstractions.csproj" />
   </ItemGroup>
 
   <!-- Dépendances spécifiques à .NET 8.0 -->

@@ -6,12 +6,29 @@ import { MainLayout } from './components/MainLayout'
 import { PreferencesScreen } from './components/settings/PreferencesScreen'
 import { LogBrowserSettingsScreen } from './components/settings/LogBrowserSettingsScreen'
 import { usePreferencesStore } from './store/preferencesStore'
+import { fetchAuthConfig, type AuthUiDescriptor } from './api/auth'
 
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('logwatcher_token'))
+  const [authConfig, setAuthConfig] = useState<AuthUiDescriptor | null>(null)
 
-  if (!token) {
-    return <LoginScreen onLogin={setToken} />
+  useEffect(() => {
+    // Redirect-mode (company SSO) callback lands back here as "/?token=...".
+    const urlToken = new URLSearchParams(window.location.search).get('token')
+    if (urlToken) {
+      localStorage.setItem('logwatcher_token', urlToken)
+      window.history.replaceState({}, '', window.location.pathname)
+      setToken(urlToken)
+    }
+
+    // Falls back to the password form if the backend predates this endpoint.
+    fetchAuthConfig().then(setAuthConfig).catch(() => setAuthConfig({ mode: 'password' }))
+  }, [])
+
+  if (!authConfig) return null
+
+  if (!token && authConfig.mode !== 'none') {
+    return <LoginScreen onLogin={setToken} authConfig={authConfig} />
   }
 
   return <LoggedInApp onLogout={() => { localStorage.removeItem('logwatcher_token'); setToken(null) }} />

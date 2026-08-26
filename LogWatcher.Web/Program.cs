@@ -1,3 +1,4 @@
+using LogWatcher.Auth.Abstractions;
 using LogWatcher.Web.Auth;
 using LogWatcher.Web.Config;
 using LogWatcher.Web.Hubs;
@@ -61,6 +62,10 @@ if (grpcPort > 0 && grpcInsecure)
 // ── Authentication (extensible via Auth:Provider) ──────────────────────────
 var authProvider = AuthProviderFactory.Create(config);
 authProvider.ConfigureServices(builder.Services, config);
+builder.Services.AddSingleton<IAuthenticationProvider>(authProvider);
+
+if (authProvider.ProviderName == "none")
+    NLog.LogManager.GetCurrentClassLogger().Warn("Authentication is DISABLED (Auth:Provider=none) — do not use in production.");
 
 // ── Core services ──────────────────────────────────────────────────────────
 builder.Services.AddDataProtection();

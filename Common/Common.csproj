@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <PackageReference Include="SharpCompress" Version="0.48.*" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.*" />
   </ItemGroup>
 
 </Project>

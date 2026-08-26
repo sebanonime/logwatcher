@@ -1,6 +1,7 @@
 using Grpc.Core;
 using Grpc.Net.Client;
 using LogWatcher.Common;
+using LogWatcher.Common.Auth;
 using LogWatcher.Grpc;
 using System.Collections.Concurrent;
 using System.Net;
@@ -17,6 +18,7 @@ namespace LogWatcher.Agent;
 public class AgentGrpcClient : IAsyncDisposable
 {
     private readonly IConfiguration _config;
+    private readonly IAgentCredentialProvider _credentialProvider;
     private readonly AgentLineIndex _lineIndex;
     private readonly ILogger<AgentGrpcClient> _log;
 
@@ -32,9 +34,10 @@ public class AgentGrpcClient : IAsyncDisposable
     // Must match (or stay below) the backend's AddGrpc() MaxReceiveMessageSize in Program.cs.
     private const int MaxGrpcMessageSize = 32 * 1024 * 1024;
 
-    public AgentGrpcClient(IConfiguration config, AgentLineIndex lineIndex, ILogger<AgentGrpcClient> log)
+    public AgentGrpcClient(IConfiguration config, IAgentCredentialProvider credentialProvider, AgentLineIndex lineIndex, ILogger<AgentGrpcClient> log)
     {
         _config = config;
+        _credentialProvider = credentialProvider;
         _lineIndex = lineIndex;
         _log = log;
     }
@@ -43,7 +46,7 @@ public class AgentGrpcClient : IAsyncDisposable
     {
         string backendUrl = _config["Agent:BackendGrpcUrl"] ?? "https://localhost";
         int port = _config.GetValue<int>("Agent:BackendGrpcPort", 5005);
-        string token = _config["Agent:Token"] ?? throw new InvalidOperationException("Agent:Token not configured.");
+        string? token = await _credentialProvider.GetBearerTokenAsync(_config, ct);
         string agentId = _config["Agent:AgentId"] ?? Environment.MachineName;
 
         var uri = new UriBuilder(backendUrl) { Port = port }.Uri;
@@ -73,8 +76,10 @@ public class AgentGrpcClient : IAsyncDisposable
         GrpcChannelOptions channelOptions;
         if (insecure)
         {
-            // HTTP/2 cleartext — inject token via HttpClient default header
-            var httpClient = new HttpClient(socketsHandler) { Timeout = Timeout.InfiniteTimeSpan, DefaultRequestHeaders = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token) } };
+            // HTTP/2 cleartext — inject token via HttpClient default header, when present
+            var httpClient = new HttpClient(socketsHandler) { Timeout = Timeout.InfiniteTimeSpan };
+            if (!string.IsNullOrEmpty(token))
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             channelOptions = new GrpcChannelOptions
             {
                 HttpClient = httpClient,
@@ -89,16 +94,17 @@ public class AgentGrpcClient : IAsyncDisposable
             {
                 RemoteCertificateValidationCallback = (_, _, _, _) => true,
             };
+            var transportCredentials = string.IsNullOrEmpty(token)
+                ? new SslCredentials()
+                : ChannelCredentials.Create(new SslCredentials(), CallCredentials.FromInterceptor((context, metadata) =>
+                {
+                    metadata.Add("authorization", $"Bearer {token}");
+                    return Task.CompletedTask;
+                }));
             channelOptions = new GrpcChannelOptions
             {
                 HttpHandler = socketsHandler,
-                Credentials = ChannelCredentials.Create(
-                    new SslCredentials(),
-                    CallCredentials.FromInterceptor((context, metadata) =>
-                    {
-                        metadata.Add("authorization", $"Bearer {token}");
-                        return Task.CompletedTask;
-                    })),
+                Credentials = transportCredentials,
                 MaxReceiveMessageSize = MaxGrpcMessageSize,
                 MaxSendMessageSize = MaxGrpcMessageSize,
             };

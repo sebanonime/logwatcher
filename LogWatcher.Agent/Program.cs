@@ -1,4 +1,6 @@
 using LogWatcher.Agent;
+using LogWatcher.Agent.Auth;
+using LogWatcher.Common.Auth;
 using NLog;
 using NLog.Web;
 
@@ -34,6 +36,11 @@ try
         })
         .ConfigureServices((context, services) =>
         {
+            var credentialProvider = AgentCredentialProviderFactory.Create(context.Configuration);
+            if (credentialProvider is NoAgentCredentialProvider)
+                logger.Warn("Authentication is DISABLED (Agent:AuthProvider=none) — do not use in production.");
+
+            services.AddSingleton<IAgentCredentialProvider>(credentialProvider);
             services.AddSingleton<AgentLineIndex>();
             services.AddTransient<AgentGrpcClient>();
             services.AddHostedService<AgentWorker>();
