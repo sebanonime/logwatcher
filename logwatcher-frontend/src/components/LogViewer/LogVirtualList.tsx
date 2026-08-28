@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react'
+import React, { useRef, useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { HubConnection } from '@microsoft/signalr'
 import { useVirtualLines } from '../../hooks/useVirtualLines'
@@ -34,6 +34,10 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   const [windowStartIndex, setWindowStartIndex] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
 
+  // Largeur horizontale (px) du contenu le plus large vu jusqu'ici ; ne fait que croître
+  // pendant une session de scroll pour stabiliser la scrollbar horizontale (voir effet plus bas).
+  const [sizerWidthPx, setSizerWidthPx] = useState(0)
+
   // AJUSTEMENT SÉCURISÉ : Nombre de lignes affichables dans la page courante (garanti >= 0)
   const currentBufferCount = Math.max(0, Math.min(totalLines - windowStartIndex, BUFFER_PAGE_SIZE))
   const lastScrollTopRef = useRef(0)
@@ -44,6 +48,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       setWindowStartIndex(0)
       setScrollTop(0)
       lastScrollTopRef.current = 0
+      setSizerWidthPx(0)
       
       if (parentRef.current) {
         parentRef.current.scrollTop = 0
@@ -53,6 +58,11 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
       virtualizer.measure()
     }
   }, [totalLines, windowStartIndex])
+
+  // Reset de la largeur horizontale lors d'un changement d'onglet/session
+  useEffect(() => {
+    setSizerWidthPx(0)
+  }, [sessionId])
 
   // Gestion du Tail Mode (Suivi de fin de fichier)
   useEffect(() => {
@@ -75,6 +85,16 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
   })
 
   const virtualItems = virtualizer.getVirtualItems()
+
+  // Mesure la largeur de scroll réelle (incluant les lignes non tronquées qui débordent)
+  // après chaque rendu des lignes visibles, et ne garde que le maximum jamais vu.
+  // O(1) par commit (une seule lecture de propriété) — indépendant de la taille du fichier.
+  useLayoutEffect(() => {
+    const el = parentRef.current
+    if (!el) return
+    const measured = el.scrollWidth
+    setSizerWidthPx(prev => (measured > prev ? measured : prev))
+  }, [virtualItems, windowStartIndex])
 
   // Déclenchement du fetch SignalR (via useVirtualLines)
   const persistentGapsRef = useRef<Map<number, number>>(new Map())
@@ -413,7 +433,7 @@ export function LogVirtualList({ sessionId, hub, highlightingRules, fallbackHigh
         onMouseDown={e => { if (e.shiftKey) e.preventDefault() }}
         style={{ flex: 1, outline: 'none' }}
       >
-        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative', width: sizerWidthPx > 0 ? `${sizerWidthPx}px` : '100%' }}>
           {virtualItems.map(vItem => {
             const globalLineNumber = windowStartIndex + vItem.index
             if (globalLineNumber < 0 || globalLineNumber >= totalLines) return null
