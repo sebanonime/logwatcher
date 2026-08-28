@@ -72,33 +72,22 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
           )}
 
           {isBrowserVisible && (
-            <Separator className="workspace-separator workspace-separator--vertical">
-              <button
-                onClick={toggleBrowserPanel}
-                className="separator-toggle separator-toggle--left"
-                title="Hide browser"
-                aria-label="Hide browser"
-              >
-                <span aria-hidden>◂</span>
-              </button>
-            </Separator>
+            <Separator className="workspace-separator workspace-separator--vertical" />
           )}
 
           <Panel defaultSize={isBrowserVisible || isInspectorVisible ? 52 : 100} minSize={20}>
             <div className="workspace-panel workspace-panel--viewer">
               <div className="viewer-canvas">
-                {!isInspectorVisible && (
+                {isBrowserVisible ? (
                   <button
-                    onClick={toggleInspectorPanel}
-                    className="edge-toggle edge-toggle--right"
-                    title="Show inspector"
-                    aria-label="Show inspector"
+                    onClick={toggleBrowserPanel}
+                    className="edge-toggle edge-toggle--left"
+                    title="Hide browser"
+                    aria-label="Hide browser"
                   >
                     <span aria-hidden>◂</span>
                   </button>
-                )}
-
-                {!isBrowserVisible && (
+                ) : (
                   <button
                     onClick={toggleBrowserPanel}
                     className="edge-toggle edge-toggle--left"
@@ -106,6 +95,26 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
                     aria-label="Show browser"
                   >
                     <span aria-hidden>▸</span>
+                  </button>
+                )}
+
+                {isInspectorVisible ? (
+                  <button
+                    onClick={toggleInspectorPanel}
+                    className="edge-toggle edge-toggle--right"
+                    title="Hide inspector"
+                    aria-label="Hide inspector"
+                  >
+                    <span aria-hidden>▸</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={toggleInspectorPanel}
+                    className="edge-toggle edge-toggle--right"
+                    title="Show inspector"
+                    aria-label="Show inspector"
+                  >
+                    <span aria-hidden>◂</span>
                   </button>
                 )}
 
@@ -117,16 +126,7 @@ export function MainLayout({ hub, onOpenPreferences, onOpenLogBrowserSettings }:
           </Panel>
 
           {isInspectorVisible && (
-            <Separator className="workspace-separator workspace-separator--vertical">
-              <button
-                onClick={toggleInspectorPanel}
-                className="separator-toggle separator-toggle--right"
-                title="Hide inspector"
-                aria-label="Hide inspector"
-              >
-                <span aria-hidden>▸</span>
-              </button>
-            </Separator>
+            <Separator className="workspace-separator workspace-separator--vertical" />
           )}
 
           {isInspectorVisible && (

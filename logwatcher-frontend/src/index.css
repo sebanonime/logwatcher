@@ -379,36 +379,6 @@ select {
   background: var(--border-strong);
 }
 
-.separator-toggle {
-  position: absolute;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-3);
-  color: var(--text-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateY(-50%);
-  cursor: pointer;
-  z-index: 3;
-}
-
-.separator-toggle:hover {
-  color: var(--text-1);
-  border-color: var(--accent-2);
-}
-
-.separator-toggle--left {
-  left: -4px;
-}
-
-.separator-toggle--right {
-  right: -4px;
-}
-
 .browser-shell,
 .inspector-rail {
   display: flex;
@@ -723,10 +693,9 @@ select {
 
 .edge-toggle {
   position: absolute;
-  top: 50%;
+  top: 2px;
   width: 14px;
   height: 24px;
-  transform: translateY(-50%);
   border: 1px solid var(--border-strong);
   background: var(--surface-2);
   color: var(--text-2);
@@ -758,7 +727,7 @@ select {
   display: flex;
   gap: 3px;
   overflow-x: auto;
-  padding: 2px 3px;
+  padding: 2px 18px; /* leaves room for the edge-toggle buttons so they don't cover the first/last tab */
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-2);
   flex-shrink: 0;
