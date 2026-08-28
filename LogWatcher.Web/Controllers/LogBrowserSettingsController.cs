@@ -116,7 +116,23 @@ namespace LogWatcher.Web.Controllers
         [HttpDelete("perimeters/{perimeterId}")]
         public IActionResult DeletePerimeter(string perimeterId)
         {
-            return _servers.RemovePerimeter(perimeterId) ? Ok() : NotFound();
+            return _servers.RemovePerimeter(perimeterId) ? NoContent() : NotFound();
+        }
+
+        [HttpPut("perimeters/reorder")]
+        public IActionResult ReorderPerimeters([FromBody] List<string> orderedIds)
+        {
+            return _servers.ReorderPerimeters(orderedIds ?? new List<string>())
+                ? NoContent()
+                : BadRequest("Ordered id list must contain exactly the current set of perimeter ids.");
+        }
+
+        [HttpPut("perimeters/{perimeterId}/roots/reorder")]
+        public IActionResult ReorderRoots(string perimeterId, [FromBody] List<string> orderedNames)
+        {
+            return _servers.ReorderRoots(perimeterId, orderedNames ?? new List<string>())
+                ? NoContent()
+                : BadRequest("Ordered name list must contain exactly the current set of root names.");
         }
 
         [HttpPost("perimeters/{perimeterId}/roots")]
@@ -154,9 +170,9 @@ namespace LogWatcher.Web.Controllers
                                                && string.Equals(r.Name, root.Name, StringComparison.OrdinalIgnoreCase)))
                 return BadRequest($"Root '{root.Name}' already exists.");
 
-            perimeter.RootFolders.Remove(existing);
+            var index = perimeter.RootFolders.IndexOf(existing);
             root.Servers = existing.Servers;
-            perimeter.RootFolders.Add(root);
+            perimeter.RootFolders[index] = root;
             _servers.UpsertPerimeter(perimeter);
             return Ok(root);
         }
@@ -164,7 +180,7 @@ namespace LogWatcher.Web.Controllers
         [HttpDelete("perimeters/{perimeterId}/roots/{rootName}")]
         public IActionResult DeleteRoot(string perimeterId, string rootName)
         {
-            return _servers.RemoveRoot(perimeterId, rootName) ? Ok() : NotFound();
+            return _servers.RemoveRoot(perimeterId, rootName) ? NoContent() : NotFound();
         }
 
         [HttpPost("perimeters/{perimeterId}/roots/{rootName}/paths")]
@@ -206,7 +222,7 @@ namespace LogWatcher.Web.Controllers
         [HttpDelete("perimeters/{perimeterId}/roots/{rootName}/paths/{serverId}")]
         public IActionResult DeletePath(string perimeterId, string rootName, string serverId)
         {
-            return _servers.RemoveServer(perimeterId, rootName, serverId) ? Ok() : NotFound();
+            return _servers.RemoveServer(perimeterId, rootName, serverId) ? NoContent() : NotFound();
         }
     }
 }

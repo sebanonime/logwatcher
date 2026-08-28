@@ -73,6 +73,20 @@ export function deletePerimeter(id: string) {
   })
 }
 
+export function reorderPerimeters(orderedIds: string[]) {
+  return authFetch<void>('/api/settings/log-browser/perimeters/reorder', {
+    method: 'PUT',
+    body: JSON.stringify(orderedIds),
+  })
+}
+
+export function reorderRoots(perimeterId: string, orderedNames: string[]) {
+  return authFetch<void>(`/api/settings/log-browser/perimeters/${encodeURIComponent(perimeterId)}/roots/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify(orderedNames),
+  })
+}
+
 export function createRoot(perimeterId: string, payload: Partial<RootFolderDto>) {
   return authFetch<RootFolderDto>(`/api/settings/log-browser/perimeters/${encodeURIComponent(perimeterId)}/roots`, {
     method: 'POST',

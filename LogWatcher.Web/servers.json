@@ -52,6 +52,21 @@
         ]
       },
       {
+        "Name": "Diagnostic",
+        "EnvironmentColor": null,
+        "Servers": [
+          {
+            "Id": "76e7632f",
+            "Name": "autoLogGen",
+            "Type": "smb",
+            "Host": "D:\\Seba\\Data\\Soft\\Logwatcher\\AutoLogGen\\bin\\Debug\\net10.0-windows\\autoLogGen",
+            "AgentId": "",
+            "Username": "",
+            "ShowArchives": false
+          }
+        ]
+      },
+      {
         "Name": "NASEB",
         "EnvironmentColor": null,
         "Servers": [
@@ -71,21 +86,6 @@
             "Host": "\\\\naseb\\data\\Seba\\Soft\\Logwatcher\\TestLog\\TestLog2",
             "AgentId": null,
             "Username": null,
-            "ShowArchives": false
-          }
-        ]
-      },
-      {
-        "Name": "Diagnostic",
-        "EnvironmentColor": null,
-        "Servers": [
-          {
-            "Id": "76e7632f",
-            "Name": "autoLogGen",
-            "Type": "smb",
-            "Host": "D:\\Seba\\Data\\Soft\\Logwatcher\\AutoLogGen\\bin\\Debug\\net10.0-windows\\autoLogGen",
-            "AgentId": "",
-            "Username": "",
             "ShowArchives": false
           }
         ]

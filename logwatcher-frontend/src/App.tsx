@@ -3,6 +3,7 @@ import { useLogHub } from './hooks/useLogHub'
 import { usePerimeterStore } from './store/perimeterStore'
 import { LoginScreen } from './components/LoginScreen'
 import { MainLayout } from './components/MainLayout'
+import { ConnectionStatusBanner } from './components/ConnectionStatusBanner'
 import { PreferencesScreen } from './components/settings/PreferencesScreen'
 import { LogBrowserSettingsScreen } from './components/settings/LogBrowserSettingsScreen'
 import { usePreferencesStore } from './store/preferencesStore'
@@ -62,6 +63,7 @@ function LoggedInApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <>
+      <ConnectionStatusBanner />
       <MainLayout
         hub={hub}
         onOpenPreferences={() => setShowPreferences(true)}

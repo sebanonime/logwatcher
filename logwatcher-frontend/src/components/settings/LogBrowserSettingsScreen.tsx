@@ -9,6 +9,8 @@ import {
   getKnownAgents,
   getLogBrowserSettings,
   getPathStatus,
+  reorderPerimeters,
+  reorderRoots,
   updatePath,
   updatePerimeter,
   updateRoot,
@@ -28,6 +30,15 @@ function StatusDot({ status }: { status: 'online' | 'offline' | 'unknown' }) {
   return <span className={`status-dot status-dot--${status}`} title={status} />
 }
 
+function DragHandle() {
+  return (
+    <svg className="drag-handle" viewBox="0 0 16 10" aria-hidden="true">
+      <rect x="0" y="0" width="16" height="3" rx="1.5" />
+      <rect x="0" y="7" width="16" height="3" rx="1.5" />
+    </svg>
+  )
+}
+
 export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenProps) {
   const { fetchPerimeters } = usePerimeterStore()
   const [perimeters, setPerimeters] = useState<PerimeterDto[]>([])
@@ -41,6 +52,10 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
   const [isSaving, setIsSaving] = useState(false)
   const [knownAgents, setKnownAgents] = useState<KnownAgentDto[]>([])
   const [pathStatuses, setPathStatuses] = useState<Record<string, { online?: boolean; accessible?: boolean }>>({})
+  const [dragPerimeterIndex, setDragPerimeterIndex] = useState<number | null>(null)
+  const [dragOverPerimeterIndex, setDragOverPerimeterIndex] = useState<number | null>(null)
+  const [dragRootIndex, setDragRootIndex] = useState<number | null>(null)
+  const [dragOverRootIndex, setDragOverRootIndex] = useState<number | null>(null)
 
   const selectedPerimeter = useMemo(
     () => perimeters.find(perimeter => perimeter.id === selectedPerimeterId) ?? null,
@@ -197,6 +212,42 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
 
   const type = serverDraft.type
 
+  const handlePerimeterDrop = async (toIndex: number) => {
+    const fromIndex = dragPerimeterIndex
+    setDragPerimeterIndex(null)
+    setDragOverPerimeterIndex(null)
+    if (fromIndex === null || fromIndex === toIndex) return
+
+    const next = [...perimeters]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    setPerimeters(next)
+    try {
+      await reorderPerimeters(next.map(p => p.id))
+    } catch (reorderError) {
+      setError(reorderError instanceof Error ? reorderError.message : 'Could not reorder perimeters.')
+      await load()
+    }
+  }
+
+  const handleRootDrop = async (toIndex: number) => {
+    const fromIndex = dragRootIndex
+    setDragRootIndex(null)
+    setDragOverRootIndex(null)
+    if (fromIndex === null || fromIndex === toIndex || !selectedPerimeterId || !selectedPerimeter) return
+
+    const next = [...selectedPerimeter.rootFolders]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    setPerimeters(prev => prev.map(p => (p.id === selectedPerimeterId ? { ...p, rootFolders: next } : p)))
+    try {
+      await reorderRoots(selectedPerimeterId, next.map(r => r.name))
+    } catch (reorderError) {
+      setError(reorderError instanceof Error ? reorderError.message : 'Could not reorder environments.')
+      await load()
+    }
+  }
+
   return (
     <div className="settings-overlay">
       <div className="settings-screen">
@@ -218,13 +269,20 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <button className="control-button control-button--ghost" onClick={() => { setSelectedPerimeterId(null); setPerimeterName(''); }}>New</button>
             </div>
             <div className="settings-list-panel">
-              {perimeters.map(perimeter => (
+              {perimeters.map((perimeter, index) => (
                 <button
                   key={perimeter.id}
-                  className={`settings-list-item ${selectedPerimeterId === perimeter.id ? 'settings-list-item--active' : ''}`}
+                  draggable
+                  onDragStart={() => setDragPerimeterIndex(index)}
+                  onDragOver={event => { event.preventDefault(); setDragOverPerimeterIndex(index) }}
+                  onDragLeave={() => setDragOverPerimeterIndex(null)}
+                  onDrop={event => { event.preventDefault(); handlePerimeterDrop(index) }}
+                  onDragEnd={() => { setDragPerimeterIndex(null); setDragOverPerimeterIndex(null) }}
+                  className={`settings-list-item ${selectedPerimeterId === perimeter.id ? 'settings-list-item--active' : ''} ${dragPerimeterIndex === index ? 'settings-list-item--dragging' : ''} ${dragOverPerimeterIndex === index && dragPerimeterIndex !== index ? 'settings-list-item--drag-over' : ''}`}
                   onClick={() => setSelectedPerimeterId(perimeter.id)}
                 >
-                  {perimeter.name}
+                  <DragHandle />
+                  <span>{perimeter.name}</span>
                 </button>
               ))}
             </div>
@@ -257,13 +315,20 @@ export function LogBrowserSettingsScreen({ onClose }: LogBrowserSettingsScreenPr
               <button className="control-button control-button--ghost" onClick={() => { setSelectedRootName(null); setRootName(''); }}>New</button>
             </div>
             <div className="settings-list-panel">
-              {selectedPerimeter?.rootFolders.map(root => (
+              {selectedPerimeter?.rootFolders.map((root, index) => (
                 <button
                   key={root.name}
-                  className={`settings-list-item ${selectedRootName === root.name ? 'settings-list-item--active' : ''}`}
+                  draggable
+                  onDragStart={() => setDragRootIndex(index)}
+                  onDragOver={event => { event.preventDefault(); setDragOverRootIndex(index) }}
+                  onDragLeave={() => setDragOverRootIndex(null)}
+                  onDrop={event => { event.preventDefault(); handleRootDrop(index) }}
+                  onDragEnd={() => { setDragRootIndex(null); setDragOverRootIndex(null) }}
+                  className={`settings-list-item ${selectedRootName === root.name ? 'settings-list-item--active' : ''} ${dragRootIndex === index ? 'settings-list-item--dragging' : ''} ${dragOverRootIndex === index && dragRootIndex !== index ? 'settings-list-item--drag-over' : ''}`}
                   onClick={() => setSelectedRootName(root.name)}
                 >
-                  {root.name}
+                  <DragHandle />
+                  <span>{root.name}</span>
                 </button>
               ))}
             </div>

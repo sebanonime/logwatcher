@@ -104,6 +104,42 @@ namespace LogWatcher.Web.Config
             }
         }
 
+        /// <summary>Reorders perimeters in-place according to the given id order (must contain the same set of ids).</summary>
+        public bool ReorderPerimeters(IReadOnlyList<string> orderedIds)
+        {
+            lock (_lock)
+            {
+                var currentIds = _perimeters.Select(p => p.Id).ToHashSet();
+                if (orderedIds == null || orderedIds.Count != currentIds.Count || !currentIds.SetEquals(orderedIds))
+                    return false;
+
+                var byId = _perimeters.ToDictionary(p => p.Id);
+                _perimeters = orderedIds.Select(id => byId[id]).ToList();
+                Save();
+                return true;
+            }
+        }
+
+        /// <summary>Reorders a perimeter's root folders in-place according to the given name order.</summary>
+        public bool ReorderRoots(string perimeterId, IReadOnlyList<string> orderedNames)
+        {
+            lock (_lock)
+            {
+                var perimeter = _perimeters.FirstOrDefault(p => p.Id == perimeterId);
+                if (perimeter == null) return false;
+
+                var currentNames = perimeter.RootFolders.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (orderedNames == null || orderedNames.Count != currentNames.Count
+                    || !currentNames.SetEquals(orderedNames))
+                    return false;
+
+                var byName = perimeter.RootFolders.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
+                perimeter.RootFolders = orderedNames.Select(name => byName[name]).ToList();
+                Save();
+                return true;
+            }
+        }
+
         public RootFolderDefinition UpsertRoot(string perimeterId, RootFolderDefinition root)
         {
             lock (_lock)

@@ -869,6 +869,30 @@ select {
   border-color: var(--border-strong);
 }
 
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 4px 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.connection-banner--warn {
+  background: var(--warn);
+  color: #1a1a1a;
+}
+
+.connection-banner--error {
+  background: var(--danger);
+  color: #1a1a1a;
+}
+
+
 .index-progress-bar {
   height: 3px;
   flex-shrink: 0;
@@ -1537,6 +1561,9 @@ select {
 }
 
 .settings-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-3);
   color: var(--text-1);
@@ -1549,6 +1576,34 @@ select {
 .settings-list-item--active {
   border-color: var(--accent-2);
   background: rgba(124, 183, 255, 0.16);
+}
+
+.settings-list-item--dragging {
+  opacity: 0.4;
+}
+
+.settings-list-item--drag-over {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 2px 0 var(--accent-2);
+}
+
+.drag-handle {
+  flex-shrink: 0;
+  width: 14px;
+  height: 9px;
+  color: var(--text-3);
+}
+
+.drag-handle rect {
+  fill: currentColor;
+}
+
+.settings-list-item:hover .drag-handle {
+  color: var(--text-2);
+}
+
+.settings-list-item--active .drag-handle {
+  color: var(--accent-2);
 }
 
 .settings-split-layout {
