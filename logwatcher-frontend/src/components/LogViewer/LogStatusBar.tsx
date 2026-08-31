@@ -23,7 +23,9 @@ export function LogStatusBar({ sessionId }: LogStatusBarProps) {
         <span className="status-pill status-pill--danger" title={tab.errorMessage}>{tab.errorMessage}</span>
       )}
       <span className="flex-1" />
-      <span className="log-status-path">{tab.serverName} · {tab.filePath}</span>
+      <span className="log-status-path">
+        {tab.isSearchResults ? `Search results · ${tab.serverName}` : `${tab.serverName} · ${tab.filePath}`}
+      </span>
     </div>
   )
 }

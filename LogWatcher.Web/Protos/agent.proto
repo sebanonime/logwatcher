@@ -76,9 +76,21 @@ message PushFilterResultMsg {
   repeated int32 matching_lines    = 3;
 }
 
+message MatchedLine {
+  int32  line_number = 1;
+  string text        = 2;
+}
+
+message SearchFileResult {
+  string   path          = 1;
+  string   last_modified = 2;
+  repeated MatchedLine lines = 3;
+  bool     truncated     = 4;
+}
+
 message PushSearchResultMsg {
-  string          request_id      = 1;
-  repeated string matching_paths  = 2;
+  string                    request_id   = 1;
+  repeated SearchFileResult file_results = 2;
 }
 
 // ── Backend → Agent ─────────────────────────────────────────────────────────
@@ -140,9 +152,10 @@ message BuildFilterCmd {
 }
 
 message SearchFilesCmd {
-  string request_id     = 1;
-  string directory      = 2;
-  string pattern        = 3;
-  bool   is_regex       = 4;
-  string name_filter    = 5;
+  string request_id          = 1;
+  string directory           = 2;
+  string pattern             = 3;
+  bool   is_regex            = 4;
+  string name_filter         = 5;
+  int32  max_matches_per_file = 6;
 }

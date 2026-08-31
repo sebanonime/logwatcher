@@ -167,6 +167,8 @@ export interface LogTab {
   environmentColor?: string
   isFiltering?: boolean
   filterProgress?: number  // 0-100 percent, set by OnFilterProgress, cleared on completion
+  /** True when this tab is a static "search results" virtual log (no tailing, no source file). */
+  isSearchResults?: boolean
 }
 
 export type UserFontFamily = 'Cascadia Code' | 'Consolas' | 'Segoe UI' | 'Bahnschrift'

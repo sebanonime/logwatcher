@@ -65,7 +65,7 @@ namespace LogWatcher.Web.Sources
         /// Searches file contents on the source side. Returns null if not supported (falls back to per-file ReadRawAsync).
         /// Agent sources implement this to avoid transmitting file bytes to the backend.
         /// </summary>
-        Task<string[]?> SearchFilesAsync(string directory, string nameFilter, string pattern, bool isRegex, CancellationToken ct)
-            => Task.FromResult<string[]?>(null);
+        Task<FileSearchMatchDto[]?> SearchFilesAsync(string directory, string nameFilter, string pattern, bool isRegex, int maxMatchesPerFile, CancellationToken ct)
+            => Task.FromResult<FileSearchMatchDto[]?>(null);
     }
 }

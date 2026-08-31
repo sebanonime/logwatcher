@@ -12,7 +12,7 @@ namespace LogWatcher.Web.Sessions
     /// Manages all state for one open log file (one browser tab).
     /// Handles indexing, tail, paging, and filter.
     /// </summary>
-    public class WatchSession : IAsyncDisposable
+    public class WatchSession : IWatchSession
     {
         // Temporary diagnostics logger for the "rare missing lines during live tail" investigation.
         // Isolated to logs/tail-diag-*.log via nlog.config (see logger name="TailDiag" rule).

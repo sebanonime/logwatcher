@@ -136,113 +136,18 @@ namespace LogWatcher.Web.Hubs
         }
 
         /// <summary>
-        /// Searches file content within a directory for lines matching <paramref name="contentPattern"/>.
+        /// Opens a "search results" tab: scans matching files in the background for lines matching
+        /// <paramref name="contentPattern"/> and streams them to the caller through the normal
+        /// OnFileStats/OnLines paging surface, as if they were a single virtual log file.
         /// Only files whose names match <paramref name="nameFilter"/> (if non-empty) are searched.
-        /// Sends progress updates via OnSearchProgress(scanned, total) and returns matching files.
         /// </summary>
-        public async Task<RemoteFileInfoDto[]> SearchFileContent(
-            string perimeterId, string rootFolderName, string subpath,
+        public async Task OpenSearchResults(
+            string sessionId, string perimeterId, string rootFolderName, string subpath,
             string nameFilter, string contentPattern, bool isRegex)
         {
-            var servers = _serverConfig.GetServersInRoot(perimeterId, rootFolderName);
-            var matches = new List<RemoteFileInfoDto>();
-            var nameSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            System.Text.RegularExpressions.Regex regex = null;
-            if (isRegex && !string.IsNullOrWhiteSpace(contentPattern))
-            {
-                try { regex = new System.Text.RegularExpressions.Regex(contentPattern, System.Text.RegularExpressions.RegexOptions.None); }
-                catch { regex = null; }
-            }
-
-            // For agent servers, delegate search to agent to avoid full file transfer.
-            // For SMB servers, collect files and scan individually.
-            var localFiles = new List<(RemoteFileInfoDto File, IFileSourceProvider Provider)>();
-            var agentProviders = new List<IFileSourceProvider>();
-
-            foreach (var server in servers)
-            {
-                IFileSourceProvider provider = server.Type switch
-                {
-                    "smb" => new LocalOrSmbFileSourceProvider(server, _credentials),
-                    "agent" => new AgentFileSourceProvider(server, _agentRegistry),
-                    _ => null
-                };
-                if (provider == null) continue;
-
-                var basePath = server.Host ?? string.Empty;
-                var dirPath = string.IsNullOrEmpty(subpath)
-                    ? basePath
-                    : Path.Combine(basePath, subpath).Replace('\\', '/');
-
-                try
-                {
-                    // If provider supports remote search (agent), delegate entirely
-                    var remotePaths = await provider.SearchFilesAsync(dirPath, nameFilter, contentPattern, isRegex, CancellationToken.None);
-                    if (remotePaths != null)
-                    {
-                        agentProviders.Add(provider);
-                        foreach (var path in remotePaths)
-                        {
-                            var fname = Path.GetFileName(path);
-                            if (nameSet.Add(fname))
-                                matches.Add(new RemoteFileInfoDto
-                                {
-                                    Path = path,
-                                    IsDirectory = false,
-                                    ServerId = server.Id,
-                                    SourceName = server.Name,
-                                    LastModified = DateTimeOffset.UtcNow,
-                                });
-                        }
-                        continue;
-                    }
-
-                    // Local/SMB: collect candidate files for per-file scan
-                    var items = (await provider.ListFilesAsync(dirPath, "*", CancellationToken.None)).ToList();
-                    foreach (var item in items) { item.ServerId = server.Id; item.SourceName = server.Name; }
-                    var candidates = items.Where(i => !i.IsDirectory).ToList();
-                    if (!string.IsNullOrWhiteSpace(nameFilter))
-                        candidates = candidates.Where(f =>
-                            Path.GetFileName(f.Path).Contains(nameFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-                    localFiles.AddRange(candidates.Select(f => (f, provider)));
-                }
-                catch { /* skip unreachable servers */ }
-            }
-
-            int total = localFiles.Count;
-            int scanned = 0;
-            await Clients.Caller.SendAsync("OnSearchProgress", 0, total);
-
-            foreach (var (file, provider) in localFiles)
-            {
-                try
-                {
-                    var found = await FileContainsPatternAsync(provider, file.Path, contentPattern, regex);
-                    if (found)
-                    {
-                        var fname = Path.GetFileName(file.Path);
-                        if (nameSet.Add(fname))
-                            matches.Add(file);
-                    }
-                }
-                catch { /* skip unreadable files */ }
-                finally
-                {
-                    scanned++;
-                    if (scanned % 5 == 0 || scanned == total)
-                        await Clients.Caller.SendAsync("OnSearchProgress", scanned, total);
-                }
-            }
-
-            foreach (var (_, provider) in localFiles.GroupBy(x => x.Provider).Select(g => g.First()))
-                await provider.DisposeAsync();
-            foreach (var provider in agentProviders)
-                await provider.DisposeAsync();
-
-            return matches
-                .OrderBy(f => f.LastModified)
-                .ToArray();
+            await Groups.AddToGroupAsync(Context.ConnectionId, sessionId);
+            await _sessions.OpenSearchResultsAsync(
+                sessionId, perimeterId, rootFolderName, subpath, nameFilter, contentPattern, isRegex, Context.ConnectionId);
         }
 
         public async Task RequestFileStats(string sessionId)
@@ -254,40 +159,6 @@ namespace LogWatcher.Web.Hubs
             {
                 await session.SendCurrentStatsAsync();
             }
-        }
-
-        private static async Task<bool> FileContainsPatternAsync(
-            IFileSourceProvider provider, string path, string pattern,
-            System.Text.RegularExpressions.Regex regex)
-        {
-            if (string.IsNullOrWhiteSpace(pattern)) return false;
-
-            const int MaxBytes = 8 * 1024 * 1024; // cap at 8 MB per file
-            long totalRead = 0;
-            var leftover = string.Empty;
-
-            await foreach (var chunk in provider.ReadRawAsync(path, 0, CancellationToken.None))
-            {
-                var text = System.Text.Encoding.UTF8.GetString(chunk.Span);
-                var combined = leftover + text;
-
-                if (regex != null)
-                {
-                    if (regex.IsMatch(combined)) return true;
-                }
-                else
-                {
-                    if (combined.Contains(pattern, StringComparison.OrdinalIgnoreCase)) return true;
-                }
-
-                // Keep last few chars as leftover to handle matches split across chunks
-                leftover = combined.Length > 512 ? combined[^512..] : combined;
-
-                totalRead += chunk.Length;
-                if (totalRead >= MaxBytes) break;
-            }
-
-            return false;
         }
     }
 }

@@ -125,8 +125,8 @@ namespace LogWatcher.Web.Sources
             return await _registry.SendFilterRequestAsync(_server.AgentId, requestId, cmd, ct);
         }
 
-        public async Task<string[]?> SearchFilesAsync(
-            string directory, string nameFilter, string pattern, bool isRegex, CancellationToken ct)
+        public async Task<FileSearchMatchDto[]?> SearchFilesAsync(
+            string directory, string nameFilter, string pattern, bool isRegex, int maxMatchesPerFile, CancellationToken ct)
         {
             if (!_registry.IsConnected(_server.AgentId))
                 return null;
@@ -137,6 +137,7 @@ namespace LogWatcher.Web.Sources
                 NameFilter = nameFilter ?? string.Empty,
                 Pattern = pattern ?? string.Empty,
                 IsRegex = isRegex,
+                MaxMatchesPerFile = maxMatchesPerFile,
             }, ct);
         }
 

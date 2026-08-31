@@ -63,10 +63,10 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
     selectedRootFolder, subfolders, rootFiles, rootFilesFolderPath, subfoldersFilter, selectedSubfolder,
     files, filesFilter, isLoadingSubfolders, isLoadingFiles,
     archiveBreadcrumb, archiveEntries, isLoadingArchive,
-    contentFilter, contentFilterIsRegex, isSearchingContent, searchProgress, contentSearchResults,
+    contentFilter, contentFilterIsRegex, matchedSearchFiles,
     loadRoot, loadSubfolder, refreshFiles, enterArchive, enterArchiveFolder, goToArchiveBreadcrumb, exitArchive,
     setSubfoldersFilter, setFilesFilter,
-    setContentFilter, setContentFilterIsRegex, searchContent, clearContentSearch, clearSearchResults,
+    setContentFilter, setContentFilterIsRegex, openSearchResultsTab, clearMatchedSearchFiles,
   } = useBrowserStore()
 
   const { tabs, addTab, removeTab, setActive } = useTabStore()
@@ -171,9 +171,9 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   const handleSearchAndClose = useCallback(() => {
     if (!selectedPerimeterId || !selectedRootFolder) return
-    searchContent(selectedPerimeterId, selectedRootFolder, selectedSubfolder)
-      .then(() => setShowSearchPopup(false))
-  }, [selectedPerimeterId, selectedRootFolder, selectedSubfolder, searchContent])
+    openSearchResultsTab(selectedPerimeterId, selectedRootFolder, selectedSubfolder)
+    setShowSearchPopup(false)
+  }, [selectedPerimeterId, selectedRootFolder, selectedSubfolder, openSearchResultsTab])
 
   const virtualRootFolder: RemoteFileInfoDto | null = rootFilesFolderPath && rootFiles.length > 0
     ? {
@@ -200,14 +200,10 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
   }, {})
 
   // Determine which file list to display
-  const baseFiles = contentSearchResults !== null
-    ? contentSearchResults
-    : files.filter(f => basename(f.path).toLowerCase().includes(filesFilter.toLowerCase()))
+  const baseFiles = files
+    .filter(f => !matchedSearchFiles || matchedSearchFiles.includes(f.path))
+    .filter(f => basename(f.path).toLowerCase().includes(filesFilter.toLowerCase()))
   const displayedFiles = showCurrentOnly ? baseFiles.filter(f => !isRolledFile(f.path)) : baseFiles
-
-  const progressPct = searchProgress && searchProgress.total > 0
-    ? Math.round((searchProgress.scanned / searchProgress.total) * 100)
-    : 0
 
   return (
     <div className="browser-shell">
@@ -308,10 +304,15 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                 <div>
                   <div className="section-label">
                     Files
-                    {contentSearchResults !== null && (
+                    {matchedSearchFiles && (
                       <>
-                        <span className="browser-search-badge">{contentSearchResults.length} match{contentSearchResults.length !== 1 ? 'es' : ''}</span>
-                        <button className="browser-clear-results-btn" onClick={() => { clearContentSearch(); setShowSearchPopup(false) }} title="Clear search results">✕</button>
+                        <span className="browser-search-badge">{matchedSearchFiles.length} matched</span>
+                        <button
+                          className="browser-clear-results-btn"
+                          onClick={clearMatchedSearchFiles}
+                          title="Clear search results filter"
+                          aria-label="Clear search results filter"
+                        >✕</button>
                       </>
                     )}
                   </div>
@@ -323,12 +324,12 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                       className="control-input browser-files-filter"
                       placeholder="Filter by name…"
                       value={filesFilter}
-                      onChange={e => { setFilesFilter(e.target.value); clearSearchResults() }}
+                      onChange={e => { setFilesFilter(e.target.value); clearMatchedSearchFiles() }}
                     />
                     {filesFilter && (
                       <button
                         className="browser-files-filter-clear"
-                        onClick={() => { setFilesFilter(''); clearSearchResults() }}
+                        onClick={() => { setFilesFilter(''); clearMatchedSearchFiles() }}
                         title="Clear filter"
                         aria-label="Clear filter"
                       >×</button>
@@ -336,7 +337,7 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                   </div>
                   <div className="browser-search-popup-anchor">
                     <button
-                      className={`control-button ${showSearchPopup || contentSearchResults !== null ? 'control-button--primary' : 'control-button--ghost'} browser-search-toggle`}
+                      className={`control-button ${showSearchPopup || matchedSearchFiles ? 'control-button--primary' : 'control-button--ghost'} browser-search-toggle`}
                       title="Search in file contents"
                       onClick={() => setShowSearchPopup(v => !v)}
                     >⌕</button>
@@ -365,22 +366,11 @@ export function LogBrowser({ onOpenSettings }: { onOpenSettings: () => void }) {
                               <button
                                 className="control-button control-button--primary"
                                 onClick={handleSearchAndClose}
-                                disabled={isSearchingContent || !contentFilter.trim() || !selectedRootFolder}
+                                disabled={!contentFilter.trim() || !selectedRootFolder}
                               >
-                                {isSearchingContent ? 'Searching…' : 'Search'}
+                                Search
                               </button>
-                              {contentSearchResults !== null && (
-                                <button className="control-button control-button--ghost" onClick={() => { clearContentSearch(); setShowSearchPopup(false) }}>Clear</button>
-                              )}
                             </div>
-                            {isSearchingContent && searchProgress && (
-                              <div className="browser-search-progress">
-                                <div className="browser-search-progress-bar" style={{ width: `${progressPct}%` }} />
-                                <span className="browser-search-progress-label">
-                                  {searchProgress.scanned}/{searchProgress.total} files
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </>

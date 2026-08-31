@@ -75,6 +75,7 @@ builder.Services.AddSingleton<CommonPreferencesRepository>();
 builder.Services.AddSingleton<ProfileRepository>();
 builder.Services.AddSingleton<KnownAgentsRepository>();
 builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
+builder.Services.AddSingleton<ContentSearchService>();
 builder.Services.AddSingleton<WatchSessionManager>();
 
 // ── gRPC (agent ↔ backend) ────────────────────────────────────────────────

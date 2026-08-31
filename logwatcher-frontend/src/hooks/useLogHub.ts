@@ -146,9 +146,12 @@ export function useLogHub() {
 
     // On reconnect, re-join all active session groups so the client
     // keeps receiving server→client pushes (OnNewLines, OnReload, etc.).
+    // Search-result tabs are static snapshots served by the backend from memory — they don't
+    // represent a real file to (re)open, so re-invoking OpenLog for them would just error out.
     hub.onreconnected(() => {
       const allTabs = useTabStore.getState().tabs
       for (const tab of allTabs) {
+        if (tab.isSearchResults) continue
         try {
           hub.invoke('OpenLog', tab.sessionId, tab.serverId, tab.filePath, {
             encoding: 'UTF-8',

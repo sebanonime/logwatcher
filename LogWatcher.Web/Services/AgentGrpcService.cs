@@ -125,7 +125,14 @@ namespace LogWatcher.Web.Services
 
                         case AgentMessage.PayloadOneofCase.PushSearch:
                             var ps = agentMsg.PushSearch;
-                            await _registry.CompleteSearchRequestAsync(ps.RequestId, ps.MatchingPaths.ToArray());
+                            var fileResults = ps.FileResults.Select(fr => new FileSearchMatchDto
+                            {
+                                Path = fr.Path,
+                                LastModified = DateTimeOffset.TryParse(fr.LastModified, out var frDt) ? frDt : DateTimeOffset.UtcNow,
+                                Lines = fr.Lines.Select(l => new MatchedLineDto { LineNumber = l.LineNumber, Text = l.Text }).ToList(),
+                                Truncated = fr.Truncated,
+                            }).ToArray();
+                            await _registry.CompleteSearchRequestAsync(ps.RequestId, fileResults);
                             break;
                     }
                 }

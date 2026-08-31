@@ -16,7 +16,7 @@ namespace LogWatcher.Web.Services
         private readonly ConcurrentDictionary<string, TaskCompletionSource<(long, bool)>> _fileInfoRequests = new();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<RemoteFileInfoDto[]>> _listRequests = new();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<int[]>> _filterRequests = new();
-        private readonly ConcurrentDictionary<string, TaskCompletionSource<string[]>> _searchRequests = new();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<FileSearchMatchDto[]>> _searchRequests = new();
 
         private readonly ConcurrentDictionary<string, TaskCompletionSource<string[]>> _pageRequests = new();
 
@@ -145,12 +145,12 @@ namespace LogWatcher.Web.Services
 
         // ── Content search ────────────────────────────────────────────────
 
-        public async Task<string[]> SendSearchRequestAsync(
+        public async Task<FileSearchMatchDto[]> SendSearchRequestAsync(
             string agentId, SearchFilesCmd cmd, CancellationToken ct)
         {
             var requestId = Guid.NewGuid().ToString("N");
             cmd.RequestId = requestId;
-            var tcs = new TaskCompletionSource<string[]>();
+            var tcs = new TaskCompletionSource<FileSearchMatchDto[]>();
             _searchRequests[requestId] = tcs;
             try
             {
@@ -163,10 +163,10 @@ namespace LogWatcher.Web.Services
             }
         }
 
-        public Task CompleteSearchRequestAsync(string requestId, string[] matchingPaths)
+        public Task CompleteSearchRequestAsync(string requestId, FileSearchMatchDto[] fileResults)
         {
             if (_searchRequests.TryGetValue(requestId, out var tcs))
-                tcs.TrySetResult(matchingPaths);
+                tcs.TrySetResult(fileResults);
             return Task.CompletedTask;
         }
 

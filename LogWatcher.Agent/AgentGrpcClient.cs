@@ -451,7 +451,8 @@ public class AgentGrpcClient : IAsyncDisposable
     {
         try
         {
-            var matchingPaths = new List<string>();
+            var results = new List<SearchFileResult>();
+            int maxMatches = cmd.MaxMatchesPerFile > 0 ? cmd.MaxMatchesPerFile : 500;
             if (Directory.Exists(cmd.Directory))
             {
                 Regex? patternRegex = null;
@@ -467,8 +468,17 @@ public class AgentGrpcClient : IAsyncDisposable
                         !Path.GetFileName(filePath).Contains(cmd.NameFilter, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (await FileContainsAsync(filePath, cmd.Pattern, patternRegex))
-                        matchingPaths.Add(filePath);
+                    var (lines, truncated) = await ScanFileForMatchesAsync(filePath, cmd.Pattern, patternRegex, maxMatches);
+                    if (lines.Count == 0) continue;
+
+                    var result = new SearchFileResult
+                    {
+                        Path = filePath,
+                        LastModified = new FileInfo(filePath).LastWriteTimeUtc.ToString("o"),
+                        Truncated = truncated,
+                    };
+                    result.Lines.AddRange(lines);
+                    results.Add(result);
                 }
             }
 
@@ -476,7 +486,7 @@ public class AgentGrpcClient : IAsyncDisposable
             {
                 PushSearch = new PushSearchResultMsg { RequestId = cmd.RequestId }
             };
-            msg.PushSearch.MatchingPaths.AddRange(matchingPaths);
+            msg.PushSearch.FileResults.AddRange(results);
             await SendAsync(msg, ct);
         }
         catch (Exception ex)
@@ -489,21 +499,60 @@ public class AgentGrpcClient : IAsyncDisposable
         }
     }
 
-    private static async Task<bool> FileContainsAsync(string path, string pattern, Regex? patternRegex)
+    /// <summary>Scans a file line-by-line for matches, tracking 1-based original line numbers across chunk boundaries.</summary>
+    private static async Task<(List<MatchedLine> Lines, bool Truncated)> ScanFileForMatchesAsync(
+        string path, string pattern, Regex? patternRegex, int maxMatches)
     {
-        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var result = new List<MatchedLine>();
+        if (string.IsNullOrWhiteSpace(pattern)) return (result, false);
+
         const int MaxBytes = 8 * 1024 * 1024;
+        const int BufferSize = 1024 * 1024;
+        int lineNumber = 1;
+        string carry = string.Empty;
+        bool truncated = false;
+        long totalRead = 0;
+
+        bool IsMatch(string line) => patternRegex != null
+            ? patternRegex.IsMatch(line)
+            : line.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+
         try
         {
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var buf = new byte[Math.Min(MaxBytes, fs.Length > 0 ? (int)fs.Length : 65536)];
-            int read = await fs.ReadAsync(buf.AsMemory(0, buf.Length));
-            var text = Encoding.UTF8.GetString(buf, 0, read);
-            return patternRegex != null
-                ? patternRegex.IsMatch(text)
-                : text.Contains(pattern, StringComparison.OrdinalIgnoreCase);
+            var buffer = new byte[BufferSize];
+            int read;
+            while ((read = await fs.ReadAsync(buffer.AsMemory(0, buffer.Length))) > 0)
+            {
+                var combined = carry + Encoding.UTF8.GetString(buffer, 0, read);
+                var parts = combined.Split('\n');
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    var line = parts[i].TrimEnd('\r');
+                    if (IsMatch(line))
+                    {
+                        result.Add(new MatchedLine { LineNumber = lineNumber, Text = line });
+                        if (result.Count >= maxMatches) { truncated = true; break; }
+                    }
+                    lineNumber++;
+                }
+                if (truncated) break;
+                carry = parts[^1];
+
+                totalRead += read;
+                if (totalRead >= MaxBytes) break;
+            }
+
+            if (!truncated && carry.Length > 0)
+            {
+                var line = carry.TrimEnd('\r');
+                if (IsMatch(line))
+                    result.Add(new MatchedLine { LineNumber = lineNumber, Text = line });
+            }
         }
-        catch { return false; }
+        catch { /* unreadable file — return whatever was found so far */ }
+
+        return (result, truncated);
     }
 
     private async Task SendAsync(AgentMessage msg, CancellationToken ct)

@@ -18,7 +18,7 @@ namespace LogWatcher.Web.Sessions
         // SMB tail path). Isolated to logs/tail-diag-*.log via nlog.config (logger name="TailDiag").
         private static readonly NLog.Logger _diag = NLog.LogManager.GetLogger("TailDiag");
 
-        private readonly ConcurrentDictionary<string, WatchSession> _sessions = new();
+        private readonly ConcurrentDictionary<string, IWatchSession> _sessions = new();
         // Tracks which connections belong to which sessions (for cleanup on disconnect)
         private readonly ConcurrentDictionary<string, HashSet<string>> _connectionSessions = new();
         private readonly IHubContext<LogHub> _logHub;
@@ -26,19 +26,22 @@ namespace LogWatcher.Web.Sessions
         private readonly CredentialStore _credentials;
         private readonly IAgentRegistry _agentRegistry;
         private readonly ProfileRepository _profiles;
+        private readonly Services.ContentSearchService _contentSearch;
 
         public WatchSessionManager(
             IHubContext<LogHub> logHub,
             ServerConfigRepository servers,
             CredentialStore credentials,
             IAgentRegistry agentRegistry,
-            ProfileRepository profiles)
+            ProfileRepository profiles,
+            Services.ContentSearchService contentSearch)
         {
             _logHub = logHub;
             _servers = servers;
             _credentials = credentials;
             _agentRegistry = agentRegistry;
             _profiles = profiles;
+            _contentSearch = contentSearch;
         }
 
         public async Task OpenAsync(string sessionId, string serverId, string filePath,
@@ -80,6 +83,52 @@ namespace LogWatcher.Web.Sessions
                 // Run watch loop in background so OpenLog returns immediately.
                 _ = session.StartAsync();
             }
+        }
+
+        /// <summary>
+        /// Opens a static "search results" tab: scans matching files in the background and serves
+        /// the merged matching lines through the same paging/filter surface as a normal log tab.
+        /// </summary>
+        public async Task OpenSearchResultsAsync(
+            string sessionId, string perimeterId, string rootFolderName, string subpath,
+            string nameFilter, string contentPattern, bool isRegex, string connectionId)
+        {
+            if (_sessions.TryGetValue(sessionId, out _))
+            {
+                TrackConnection(connectionId, sessionId);
+                return;
+            }
+
+            var session = new SearchResultSession(sessionId, _logHub, connectionId);
+            if (!_sessions.TryAdd(sessionId, session))
+                return;
+            TrackConnection(connectionId, sessionId);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var progress = new Progress<(int Scanned, int Total)>(p =>
+                        _ = _logHub.Clients.Group(sessionId).SendAsync("OnIndexProgress", sessionId, p.Scanned, p.Total));
+
+                    var result = await _contentSearch.SearchAsync(
+                        perimeterId, rootFolderName, subpath, nameFilter, contentPattern, isRegex,
+                        progress, session.ScanCancellationToken);
+
+                    session.SetResults(result.Lines);
+                    await session.SendCurrentStatsAsync();
+                    await _logHub.Clients.Group(sessionId).SendAsync("OnSearchFilesMatched", sessionId, result.MatchedFilePaths);
+
+                    if (result.Truncated)
+                        await _logHub.Clients.Group(sessionId).SendAsync("OnError", sessionId,
+                            $"Search results truncated: showing {result.Lines.Count} matching lines (per-file and/or total match caps reached).");
+                }
+                catch (OperationCanceledException) { /* session closed mid-scan */ }
+                catch (Exception ex)
+                {
+                    await _logHub.Clients.Group(sessionId).SendAsync("OnError", sessionId, $"Search failed: {ex.Message}");
+                }
+            });
         }
 
         public void Close(string sessionId, string connectionId)
@@ -165,8 +214,8 @@ namespace LogWatcher.Web.Sessions
         public async Task HandleAgentPushAsync(string sessionId, string[] lines, long[] offsets,
             bool isInitialLoad, bool isReset)
         {
-            if (_sessions.TryGetValue(sessionId, out var session))
-                await session.HandleAgentPushAsync(lines, offsets, isInitialLoad, isReset);
+            if (_sessions.TryGetValue(sessionId, out var session) && session is WatchSession ws)
+                await ws.HandleAgentPushAsync(lines, offsets, isInitialLoad, isReset);
         }
 
         public Task HandleAgentPageAsync(string sessionId, int startLine, string[] lines)
@@ -187,16 +236,17 @@ namespace LogWatcher.Web.Sessions
             // is never true and no session ever resumes after an agent reconnects.
             foreach (var session in _sessions.Values)
             {
-                var server = _servers.GetById(session.ServerId);
+                if (session is not WatchSession ws) continue;
+                var server = _servers.GetById(ws.ServerId);
                 if (server?.Type == "agent" && server.AgentId == agentId)
                 {
                     _diag.Info("Agent reconnected agentId={0}; resuming session={1} file={2}",
-                        agentId, session.SessionId, session.FilePath);
-                    _ = session.StartAsync(); // Restart tail from last known position
+                        agentId, ws.SessionId, ws.FilePath);
+                    _ = ws.StartAsync(); // Restart tail from last known position
                 }
             }
         }
-        public WatchSession GetSession(string sessionId)
+        public IWatchSession GetSession(string sessionId)
         {
             _sessions.TryGetValue(sessionId, out var session);
             return session;

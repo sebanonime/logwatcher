@@ -18,7 +18,7 @@ namespace LogWatcher.Web.Services
         Task CompleteFileInfoRequestAsync(string requestId, long sizeBytes, bool exists);
         Task CompleteListRequestAsync(string requestId, RemoteFileInfoDto[] files);
         Task CompleteFilterRequestAsync(string requestId, int[] matchingLines);
-        Task CompleteSearchRequestAsync(string requestId, string[] matchingPaths);
+        Task CompleteSearchRequestAsync(string requestId, FileSearchMatchDto[] fileResults);
 
         Task<(long SizeBytes, bool Exists)> SendFileInfoRequestAsync(
             string agentId, string filePath, CancellationToken ct);
@@ -29,7 +29,7 @@ namespace LogWatcher.Web.Services
         Task<int[]> SendFilterRequestAsync(
             string agentId, string requestId, BuildFilterCmd cmd, CancellationToken ct);
 
-        Task<string[]> SendSearchRequestAsync(
+        Task<FileSearchMatchDto[]> SendSearchRequestAsync(
             string agentId, SearchFilesCmd cmd, CancellationToken ct);
 
         Task<string[]> SendPageRequestAsync(

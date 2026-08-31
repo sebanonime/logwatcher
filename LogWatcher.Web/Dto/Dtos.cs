@@ -76,4 +76,21 @@ namespace LogWatcher.Web.Dto
         /// <summary>Human-readable name of the server/source this item comes from.</summary>
         public string SourceName { get; set; }
     }
+
+    /// <summary>One content-search match within a file (1-based original line number).</summary>
+    public class MatchedLineDto
+    {
+        public int LineNumber { get; set; }
+        public string Text { get; set; }
+    }
+
+    /// <summary>Content-search result for a single file, returned by both SMB scanning and Agent delegation.</summary>
+    public class FileSearchMatchDto
+    {
+        public string Path { get; set; }
+        public DateTimeOffset LastModified { get; set; }
+        public List<MatchedLineDto> Lines { get; set; } = new();
+        /// <summary>True if this file had more matches than the per-file cap allows.</summary>
+        public bool Truncated { get; set; }
+    }
 }

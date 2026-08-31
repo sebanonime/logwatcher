@@ -560,13 +560,13 @@ export function MainToolbar({
             </button>
           )}
 
-          {activeTab && (
+          {activeTab && !activeTab.isSearchResults && (
             <button onClick={openLineInNewTab} disabled={!selectedLine} className="control-button control-button--ghost toolbar-action-button" title="Open selected line in new tab">
               ⧉
             </button>
           )}
 
-          {activeTab && (
+          {activeTab && !activeTab.isSearchResults && (
             <button onClick={toggleTail} className={`control-button control-button--ghost toolbar-action-button ${tailMode ? 'toolbar-action-button--active' : ''}`} title={tailMode ? 'Tail on' : 'Tail off'}>
               {tailMode ? '⬇' : '⏸'}
             </button>
