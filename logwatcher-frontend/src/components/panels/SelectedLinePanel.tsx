@@ -3,6 +3,17 @@ import { useLogStore, useTabStore } from '../../store/logStore'
 import { ensureFixFields } from '../../api/fix'
 import type { FixFieldDto } from '../../types'
 
+// ── Shared utils ────────────────────────────────────────────────────────────
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+interface ProtectedRange {
+  start: number
+  end: number
+}
+
 // ── FIX protocol ──────────────────────────────────────────────────────────────
 
 type FixFieldMap = Map<number, FixFieldDto>
@@ -81,8 +92,14 @@ function extractBalancedJsonCandidate(text: string, start: number): { end: numbe
   return null
 }
 
-function prettyJsonBlocks(text: string): string {
+// Returns the pretty-printed text plus the ranges (in the OUTPUT string) that
+// contain injected JSON. Those ranges must be left untouched by every later
+// formatting pass (XML detection, KV extraction, separator splitting) so that
+// e.g. a string value containing "<tag>" or a comma inside an array is never
+// re-interpreted as XML or as a KV/CSV separator.
+function prettyJsonBlocks(text: string): { text: string; protectedRanges: ProtectedRange[] } {
   let output = ''
+  const protectedRanges: ProtectedRange[] = []
   let i = 0
   while (i < text.length) {
     const ch = text[i]
@@ -91,11 +108,13 @@ function prettyJsonBlocks(text: string): string {
     if (!candidate) { output += ch; i++; continue }
     try {
       const parsed = JSON.parse(candidate.raw)
-      output += `\n${JSON.stringify(parsed, null, 2)}\n`
+      const block = `\n${JSON.stringify(parsed, null, 2)}\n`
+      protectedRanges.push({ start: output.length, end: output.length + block.length })
+      output += block
       i = candidate.end + 1
     } catch { output += ch; i++ }
   }
-  return output
+  return { text: output, protectedRanges }
 }
 
 // ── XML ───────────────────────────────────────────────────────────────────────
@@ -118,46 +137,164 @@ function prettyXml(xml: string): string {
   return lines.join('\n')
 }
 
-function prettyXmlBlocks(text: string): string {
-  return text.replace(/<([A-Za-z_][\w:.-]*)(?:\s[^<>]*)?>[\s\S]*?<\/\1>/g, (match) => {
-    try { return `\n${prettyXml(match)}\n` } catch { return match }
-  })
+// Finds the full <tag>...</tag> block starting at `start`, correctly handling
+// nested tags that share the same name (e.g. <a><a>x</a></a>) by tracking
+// open/close depth instead of relying on a non-greedy regex.
+function extractBalancedXmlBlock(text: string, start: number): { end: number; raw: string } | null {
+  const openTagMatch = /^<([A-Za-z_][\w:.-]*)(?:\s[^<>]*)?>/.exec(text.slice(start))
+  if (!openTagMatch) return null
+  if (/\/>$/.test(openTagMatch[0])) return null // self-closing at the top: nothing to balance
+
+  const tagName = openTagMatch[1]
+  const escapedTag = escapeRegExp(tagName)
+  const combinedRe = new RegExp(`<${escapedTag}(?:\\s[^<>]*)?/?>|</${escapedTag}\\s*>`, 'g')
+  combinedRe.lastIndex = start
+
+  let depth = 0
+  let match: RegExpExecArray | null
+  while ((match = combinedRe.exec(text)) !== null) {
+    const token = match[0]
+    if (token.startsWith('</')) {
+      depth--
+    } else if (!/\/>$/.test(token)) {
+      depth++
+    }
+    // self-closing nested tags (e.g. <a/>) don't affect depth
+    if (depth === 0) {
+      return { end: match.index + token.length, raw: text.slice(start, match.index + token.length) }
+    }
+  }
+  return null
+}
+
+// Pretty-prints XML blocks. Skips over any range already protected by an
+// earlier pass (e.g. pretty-printed JSON) so a "<tag>"-looking string inside
+// a JSON value is never mistaken for real XML. Returns the combined set of
+// protected ranges (relocated JSON ranges + newly created XML ranges) so the
+// next passes can skip them too.
+function prettyXmlBlocks(
+  text: string,
+  incomingProtected: ProtectedRange[]
+): { text: string; protectedRanges: ProtectedRange[] } {
+  let output = ''
+  const protectedRanges: ProtectedRange[] = []
+  let i = 0
+
+  const incomingAt = (pos: number) => incomingProtected.find(r => pos >= r.start && pos < r.end)
+
+  while (i < text.length) {
+    const incoming = incomingAt(i)
+    if (incoming) {
+      const start = output.length
+      output += text.slice(i, incoming.end)
+      protectedRanges.push({ start, end: output.length })
+      i = incoming.end
+      continue
+    }
+
+    const ch = text[i]
+    if (ch !== '<') { output += ch; i++; continue }
+    const rest = text.slice(i)
+    if (/^<\//.test(rest) || /^<\?/.test(rest) || /^<!/.test(rest)) { output += ch; i++; continue }
+
+    const candidate = extractBalancedXmlBlock(text, i)
+    if (!candidate) { output += ch; i++; continue }
+    try {
+      const start = output.length
+      output += `\n${prettyXml(candidate.raw)}\n`
+      protectedRanges.push({ start, end: output.length })
+      i = candidate.end
+    } catch { output += ch; i++ }
+  }
+
+  return { text: output, protectedRanges }
 }
 
 // ── Key-value ─────────────────────────────────────────────────────────────────
+//
+// Real log lines are rarely "pure" key=value: they usually have a free-text
+// prefix (timestamp, level, message) and/or suffix (logger name), with the
+// structured fields only in the middle, e.g.:
+//   2026-09-06 14:00:32.408 [TRACE] Processing request duration_ms=45,
+//   status_code=200, path=/api/v1/users [com.app.queue.KafkaListener]
+// So instead of requiring the WHOLE line to parse as key=value (which fails
+// the moment there's any surrounding text), we scan for an embedded RUN of
+// 2+ "key=value" / "key:value" tokens - separated by any mix of whitespace,
+// comma, semicolon or pipe - and format only that run, leaving the rest of
+// the line untouched.
 
-const KV_PAIR_RE = /^[\w.\-/]+\s*[=:]\s*/
-// Separator between pairs: , ; | or space-padded dash
-const KV_SEP_RE = /\s*[,;|]\s*|\s+-\s+/
+// A single token, e.g. status_code=200, path=/api/v1/users, or msg="hi, x".
+// The key must start with a letter/underscore so things like the "14" in a
+// "14:00:32.408" timestamp are never mistaken for a key. Unquoted values
+// exclude '<' and '>': without this, something like "provider: <Envelope"
+// would get greedily swallowed as the value of "provider", eating straight
+// into an XML tag that the XML pass already protected and pretty-printed --
+// producing bogus extra line breaks around it.
+const KV_TOKEN_SRC = String.raw`[A-Za-z_][\w.\-/]*\s*[=:]\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s,;|<>]+)`
+// A run of one or more tokens separated only by whitespace/comma/semicolon/pipe.
+const KV_RUN_RE = new RegExp(`${KV_TOKEN_SRC}(?:[\\s,;|]+${KV_TOKEN_SRC})*`, 'y')
 
-function looksLikeKeyValueLine(text: string): boolean {
-  const trimmed = text.trim()
-  if (!trimmed || trimmed.length < 5) return false
-  const parts = trimmed.split(KV_SEP_RE).filter(p => p.trim().length > 0)
-  if (parts.length < 2) return false
-  const kvCount = parts.filter(p => KV_PAIR_RE.test(p.trim())).length
-  return kvCount >= 2 && kvCount / parts.length >= 0.6
+function parseKvTokens(run: string): Array<{ key: string; sep: string; value: string }> {
+  const tokens: Array<{ key: string; sep: string; value: string }> = []
+  const tokenRe = new RegExp(KV_TOKEN_SRC, 'g')
+  let m: RegExpExecArray | null
+  while ((m = tokenRe.exec(run)) !== null) {
+    const kv = m[0].match(/^([A-Za-z_][\w.\-/]*)\s*([=:])\s*([\s\S]*)$/)
+    if (kv) tokens.push({ key: kv[1], sep: kv[2], value: kv[3] })
+  }
+  return tokens
 }
 
-function formatKeyValueLine(line: string): string {
-  const parts = line.trim().split(KV_SEP_RE).filter(p => p.trim().length > 0)
-  type Pair = { key: string; sep: string; value: string }
-  const pairs: Pair[] = []
+function formatKvTokens(tokens: Array<{ key: string; sep: string; value: string }>): string {
+  const sorted = [...tokens].sort((a, b) => a.key.localeCompare(b.key))
+  const maxKeyLen = sorted.reduce((max, t) => Math.max(max, t.key.length), 0)
+  return sorted.map(t => `${t.key.padEnd(maxKeyLen)} ${t.sep} ${t.value}`).join('\n')
+}
 
-  for (const p of parts) {
-    const m = p.trim().match(/^([\w.\-/]+)\s*([=:])\s*(.*)$/)
-    if (!m) return line
-    pairs.push({ key: m[1], sep: m[2], value: m[3] })
+// Finds runs of 2+ key=value tokens and replaces each with a sorted, aligned
+// block, skipping ranges already protected by the JSON/XML passes. Returns
+// the combined protected ranges so the final separator pass leaves the new
+// KV blocks alone too.
+function prettyKvBlocks(
+  text: string,
+  incomingProtected: ProtectedRange[]
+): { text: string; protectedRanges: ProtectedRange[] } {
+  let output = ''
+  const protectedRanges: ProtectedRange[] = []
+  let i = 0
+
+  const incomingAt = (pos: number) => incomingProtected.find(r => pos >= r.start && pos < r.end)
+
+  while (i < text.length) {
+    const incoming = incomingAt(i)
+    if (incoming) {
+      const start = output.length
+      output += text.slice(i, incoming.end)
+      protectedRanges.push({ start, end: output.length })
+      i = incoming.end
+      continue
+    }
+
+    KV_RUN_RE.lastIndex = i
+    const match = KV_RUN_RE.exec(text)
+    if (match) {
+      const tokens = parseKvTokens(match[0])
+      if (tokens.length >= 2) {
+        output = output.replace(/[ \t]+$/, '') // don't leave a trailing space before the block
+        const start = output.length
+        output += `\n${formatKvTokens(tokens)}\n`
+        protectedRanges.push({ start, end: output.length })
+        i += match[0].length
+        while (i < text.length && (text[i] === ' ' || text[i] === '\t')) i++ // nor a leading one after it
+        continue
+      }
+    }
+
+    output += text[i]
+    i++
   }
 
-  const maxKeyLen = pairs.reduce((max, p) => Math.max(max, p.key.length), 0)
-  return pairs.map(p => `${p.key.padEnd(maxKeyLen)} ${p.sep} ${p.value}`).join('\n')
-}
-
-function applyKeyValueFormatting(text: string): string {
-  return text.split('\n').map(line =>
-    looksLikeKeyValueLine(line) ? formatKeyValueLine(line) : line
-  ).join('\n')
+  return { text: output, protectedRanges }
 }
 
 // ── General separator splitting ───────────────────────────────────────────────
@@ -186,25 +323,44 @@ function splitHumanSeparators(text: string): string {
   return out
 }
 
+// ── Line-level orchestration ──────────────────────────────────────────────────
+
+// Maps protected character ranges to the line indices they fall on, so lines
+// coming out of the JSON/XML/KV pretty-printers (which have their own
+// internal commas, colons, etc.) are never re-split by the generic separator
+// pass below.
+function computeProtectedLineIndices(text: string, ranges: ProtectedRange[]): Set<number> {
+  const indices = new Set<number>()
+  if (ranges.length === 0) return indices
+  let line = 0
+  for (let pos = 0; pos < text.length; pos++) {
+    if (text[pos] === '\n') { line++; continue }
+    if (ranges.some(r => pos >= r.start && pos < r.end)) indices.add(line)
+  }
+  return indices
+}
+
+function applySeparatorFormatting(text: string, protectedLines: Set<number>): string {
+  return text.split('\n').map((line, idx) => {
+    if (protectedLines.has(idx)) return line
+    return splitHumanSeparators(line)
+  }).join('\n')
+}
+
 // ── Main formatter ────────────────────────────────────────────────────────────
 
 function formatForInspect(text: string, fixFields: FixFieldMap | null): string {
   if (fixFields && fixFields.size > 0 && looksLikeFix(text)) {
     return formatFix(text, fixFields)
   }
-  const withJson = prettyJsonBlocks(text)
-  const withXml = prettyXmlBlocks(withJson)
-  const withKv = applyKeyValueFormatting(withXml)
-  // Only apply generic separator splitting when KV didn't already reformat
-  if (withKv !== withXml) return withKv
-  return splitHumanSeparators(withXml)
+  const { text: withJson, protectedRanges: jsonProtected } = prettyJsonBlocks(text)
+  const { text: withXml, protectedRanges: xmlProtected } = prettyXmlBlocks(withJson, jsonProtected)
+  const { text: withKv, protectedRanges: kvProtected } = prettyKvBlocks(withXml, xmlProtected)
+  const protectedLines = computeProtectedLineIndices(withKv, kvProtected)
+  return applySeparatorFormatting(withKv, protectedLines)
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
 
 export function SelectedLinePanel() {
   const { activeSessionId } = useTabStore()
@@ -213,13 +369,14 @@ export function SelectedLinePanel() {
   const [activeMatch, setActiveMatch] = useState(0)
   const activeMatchRef = useRef<HTMLElement | null>(null)
   const [fixFields, setFixFields] = useState<FixFieldMap | null>(null)
+  const [showRaw, setShowRaw] = useState(false)
 
   useEffect(() => {
     ensureFixFields().then(fields => setFixFields(buildFixFieldMap(fields)))
   }, [])
 
   const line = activeSessionId ? getSelectedLine(activeSessionId) : null
-  const formatted = line ? formatForInspect(line.text, fixFields) : null
+  const displayText = line ? (showRaw ? line.text : formatForInspect(line.text, fixFields)) : null
 
   const searchRegex = useMemo(() => {
     if (!search.trim()) return null
@@ -227,9 +384,9 @@ export function SelectedLinePanel() {
   }, [search])
 
   const matchCount = useMemo(() => {
-    if (!formatted || !searchRegex) return 0
-    return formatted.match(searchRegex)?.length ?? 0
-  }, [formatted, searchRegex])
+    if (!displayText || !searchRegex) return 0
+    return displayText.match(searchRegex)?.length ?? 0
+  }, [displayText, searchRegex])
 
   useEffect(() => {
     setActiveMatch(0)
@@ -238,13 +395,13 @@ export function SelectedLinePanel() {
 
   useEffect(() => {
     activeMatchRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [activeMatch, formatted])
+  }, [activeMatch, displayText])
 
   const renderedContent = useMemo(() => {
-    if (!formatted) return null
-    if (!searchRegex) return formatted
+    if (!displayText) return null
+    if (!searchRegex) return displayText
 
-    const parts = formatted.split(searchRegex)
+    const parts = displayText.split(searchRegex)
     let currentMatch = -1
 
     return parts.map((part, index) => {
@@ -264,7 +421,7 @@ export function SelectedLinePanel() {
       }
       return <React.Fragment key={`t-${index}`}>{part}</React.Fragment>
     })
-  }, [formatted, searchRegex, activeMatch])
+  }, [displayText, searchRegex, activeMatch])
 
   const goNextMatch = () => {
     if (matchCount <= 0) return
@@ -278,6 +435,14 @@ export function SelectedLinePanel() {
           <div className="eyebrow">Inspect</div>
         </div>
         <div className="inspect-search-row">
+          <label className="inspect-raw-toggle">
+            <input
+              type="checkbox"
+              checked={showRaw}
+              onChange={event => setShowRaw(event.target.checked)}
+            />
+            Texte brut
+          </label>
           <input
             className="control-input inspect-search-input"
             placeholder="Search in details..."
