@@ -441,7 +441,7 @@ export function SelectedLinePanel() {
               checked={showRaw}
               onChange={event => setShowRaw(event.target.checked)}
             />
-            Texte brut
+            Raw Text
           </label>
           <input
             className="control-input inspect-search-input"
